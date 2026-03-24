@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: ai-service
+  data:
+    redis:
+      port: 6379
+      host: localhost
+      database: 0
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8088
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+techdevhub:
+  jwt:
+    secret-key: TechDevHubDefaultSecretKeyForJwtAuth2026
+    expiration: 86400000
+    issuer: techdevhub
+    header-name: Authorization
+    token-prefix: "Bearer "
+    exclude-paths:
+      - /swagger-ui/**
+      - /v3/api-docs/**
+  ai:
+    memory:
+      max-messages: 20
+
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: ${AI_API_KEY}
+      model-name: qwen-plus
+      log-requests: true
+      log-responses: true
+    streaming-chat-model:
+      api-key: ${AI_API_KEY}
+      model-name: qwen-plus
+      log-requests: true
+      log-responses: true
+logging:
+  level:
+    dev.langchain4j: debug

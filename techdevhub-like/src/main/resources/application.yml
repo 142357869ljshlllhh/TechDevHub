@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: like-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/blog_like?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+techdevhub:
+  jwt:
+    secret-key: TechDevHubDefaultSecretKeyForJwtAuth2026
+    expiration: 86400000
+    issuer: techdevhub
+    header-name: Authorization
+    token-prefix: "Bearer "
+    exclude-paths:
+      - /swagger-ui/**
+      - /v3/api-docs/**
+
+server:
+  port: 8085
