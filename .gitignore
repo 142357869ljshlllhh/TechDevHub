@@ -1,0 +1,6 @@
+# 项目排除路径
+/techdevhub-category/target/
+/techdevhub-comment/target/
+/techdevhub-follow/target/
+/techdevhub-gateway/target/
+/techdevhub-like/target/

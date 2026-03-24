@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-ai/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-blog/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-category/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-comment/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-common/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-follow/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-gateway/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-like/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/techdevhub-user/src/main/java" charset="UTF-8" />
+  </component>
+</project>

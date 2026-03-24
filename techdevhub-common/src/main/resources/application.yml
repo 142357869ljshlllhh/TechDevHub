@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: techdevhub-common
+techdevhub:
+  jwt:
+    issuer: techdevhub
+    secret-key: TechDevHubDefaultSecretKeyForJwtAuth2026
+    token-prefix: "Bearer "
+    header-name: Authorization
+    expiration: 86400000
+    exclude-paths:
