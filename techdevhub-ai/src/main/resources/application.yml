@@ -32,7 +32,12 @@ techdevhub:
     token-prefix: "Bearer "
     exclude-paths:
       - /swagger-ui/**
+      - /swagger-ui.html
       - /v3/api-docs/**
+      - /webjars/**
+      - /ai/swagger-ui/**
+      - /ai/swagger-ui.html
+      - /ai/v3/api-docs/**
   ai:
     memory:
       max-messages: 20
@@ -40,13 +45,15 @@ techdevhub:
 langchain4j:
   open-ai:
     chat-model:
-      api-key: ${AI_API_KEY}
-      model-name: qwen-plus
+      base-url: ${DASHSCOPE_BASE_URL:${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}}
+      api-key: ${DASHSCOPE_API_KEY:${AI_API_KEY}}
+      model-name: ${QWEN_MODEL_NAME:${AI_MODEL_NAME:qwen-plus}}
       log-requests: true
       log-responses: true
     streaming-chat-model:
-      api-key: ${AI_API_KEY}
-      model-name: qwen-plus
+      base-url: ${DASHSCOPE_BASE_URL:${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}}
+      api-key: ${DASHSCOPE_API_KEY:${AI_API_KEY}}
+      model-name: ${QWEN_MODEL_NAME:${AI_MODEL_NAME:qwen-plus}}
       log-requests: true
       log-responses: true
 logging:

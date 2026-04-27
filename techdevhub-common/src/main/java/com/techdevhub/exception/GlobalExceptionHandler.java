@@ -49,6 +49,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result handleException(Exception e) {
+        e.printStackTrace();
         return new Result(ErrorCode.SYSTEM_ERROR.getCode(), "系统异常，请稍后重试", null);
     }
 }

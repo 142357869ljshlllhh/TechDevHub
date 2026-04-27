@@ -1,22 +1,20 @@
 package com.techdevhub.vo;
 
-import reactor.core.publisher.Flux;
-
 public class AiChatResponse {
 
-    private Flux<String> answer;
+    private String answer;
     private Long memoryId;
 
-    public AiChatResponse(Flux<String> answer, Long memoryId) {
+    public AiChatResponse(String answer, Long memoryId) {
         this.answer = answer;
         this.memoryId = memoryId;
     }
 
-    public Flux<String> getAnswer() {
+    public String getAnswer() {
         return answer;
     }
 
-    public void setAnswer(Flux<String> answer) {
+    public void setAnswer(String answer) {
         this.answer = answer;
     }
 

@@ -40,7 +40,7 @@ public interface UserMapper {
 
     @Update("""
             update user_info 
-            set username = @{username},email = #{email}
+            set username = #{username},email = #{email}
             where id = #{id} and is_delete = 0
             """)
     int updateInformation(@Param("id") Long id, @Param("username")  String username, @Param("email") String email);
