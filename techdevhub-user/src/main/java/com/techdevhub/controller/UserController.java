@@ -58,20 +58,20 @@ public class UserController {
 
     @IgnoreToken
     @GetMapping("/{id}/profile")
-    @Operation(summary = "鑾峰彇鐢ㄦ埛鍏紑淇℃伅")
+    @Operation(summary = "查询用户基本信息接口")
     public Result profile(@PathVariable Long id) {
         return Result.success(userService.getPublicProfile(id));
     }
 
     @IgnoreToken
     @GetMapping("/{id}/admin-status")
-    @Operation(summary = "查询是否管理员")
+    @Operation(summary = "查询是否管理员接口")
     public Result adminStatus(@PathVariable Long id) {
         return Result.success(userService.isAdmin(id));
     }
 
     @PutMapping("{id}")
-    @Operation(summary = "用户信息账户信息接口",description = "只能修改自己的账户信息，修改后昵称已被使用、修改后邮箱已被使用",security = @SecurityRequirement(name = "BearerAuth"))
+    @Operation(summary = "用户修改信息信息接口",description = "只能修改自己的账户信息，修改后昵称已被使用、修改后邮箱已被使用",security = @SecurityRequirement(name = "BearerAuth"))
     @ApiResponses({
             @ApiResponse(responseCode = "200",description = "登录成功"),
             @ApiResponse(responseCode = "1005",description = "不可以修改别人的信息")

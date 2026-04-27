@@ -95,23 +95,19 @@ public class UserServiceImpl implements UserService {
     @Transactional(rollbackFor = Exception.class)
     public UserInformationVO updateUserInformation(Long id,UserUpdateDTO updateDTO){
         UserInfo userInfo = userMapper.selectUserById(id);
-        String username;
-        String email;
+        String username = userInfo.getUsername();
+        String email = userInfo.getEmail();
         if((updateDTO.getEmail() == null || updateDTO.getEmail().trim().isEmpty()) && (updateDTO.getUsername() == null || updateDTO.getUsername().trim().isEmpty())) {
             throw new BusinessException(ErrorCode.USER_UPDATE_ALL_ARE_NULL);
         }
-        if(updateDTO.getUsername() != null){
-            username = updateDTO.getUsername();
-        }else{
+        if(updateDTO.getUsername() != null && !updateDTO.getUsername().trim().isEmpty()){
             checkUsernameUnique(updateDTO.getUsername());
-            username = updateDTO.getUsername();
+            username = updateDTO.getUsername().trim();
             userInfo.setUsername(username);
         }
-        if(updateDTO.getEmail() != null){
-            email = updateDTO.getEmail();
-        }else {
+        if(updateDTO.getEmail() != null && !updateDTO.getEmail().trim().isEmpty()){
             checkEmailUnique(updateDTO.getEmail());
-            email = updateDTO.getEmail();
+            email = updateDTO.getEmail().trim();
             userInfo.setEmail(email);
         }
         if(userMapper.updateInformation(id,username,email) == 0){

@@ -16,6 +16,8 @@ public class JwtProperties {
     private String headerName = "Authorization";
     private String tokenPrefix = "Bearer ";
     private List<String> excludePaths = new ArrayList<>(List.of(
+            "/users/register",
+            "/users/login",
             "/error",
             "/actuatot/**"
     ));

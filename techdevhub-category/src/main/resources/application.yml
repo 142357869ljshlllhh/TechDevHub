@@ -23,8 +23,12 @@ techdevhub:
     token-prefix: "Bearer "
     exclude-paths:
       - /swagger-ui/**
+      - /swagger-ui.html
       - /v3/api-docs/**
+      - /webjars/**
+      - /categories/swagger-ui/**
+      - /categories/swagger-ui.html
+      - /categories/v3/api-docs/**
 
 server:
   port: 8083
-

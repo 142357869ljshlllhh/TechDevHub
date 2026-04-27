@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/user
     username: root
-    password: 1234546
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
@@ -20,6 +20,7 @@ mybatis:
   type-aliases-package: com.techdevhub.user.entity
   configuration:
     map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 techdevhub:
   jwt:
     secret-key: TechDevHubDefaultSecretKeyForJwtAuth2026
@@ -32,6 +33,11 @@ techdevhub:
       - /users/login
       - /error
       - /swagger-ui/**
+      - /swagger-ui.html
       - /v3/api-docs/**
+      - /webjars/**
+      - /users/swagger-ui/**
+      - /users/swagger-ui.html
+      - /users/v3/api-docs/**
 server:
   port: 8081

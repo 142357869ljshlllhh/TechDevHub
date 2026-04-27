@@ -1,6 +1,8 @@
 package com.techdevhub.controller;
 
 import com.techdevhub.dto.AiChatRequest;
+import com.techdevhub.enums.ErrorCode;
+import com.techdevhub.exception.BusinessException;
 import com.techdevhub.service.ConsultantService;
 import com.techdevhub.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +28,9 @@ public class AiAssistantController {
     @Operation(summary = "AI 对话")
     public Result chat(@Valid @RequestBody AiChatRequest request, HttpServletRequest httpServletRequest) {
         Long currentUserId = (Long) httpServletRequest.getAttribute("currentUserId");
+        if (currentUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         return Result.success(consultantService.chat(currentUserId, request.getMessage()));
     }
 
@@ -33,6 +38,9 @@ public class AiAssistantController {
     @Operation(summary = "清空当前用户会话记忆")
     public Result clearMemory(HttpServletRequest httpServletRequest) {
         Long currentUserId = (Long) httpServletRequest.getAttribute("currentUserId");
+        if (currentUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         consultantService.clearMemory(currentUserId);
         return Result.success();
     }
