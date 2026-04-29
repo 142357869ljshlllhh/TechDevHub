@@ -22,6 +22,7 @@ import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -37,8 +38,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+
 
 @Service
 @RequiredArgsConstructor
@@ -70,6 +74,9 @@ public class BlogServiceImpl implements BlogService {
             "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
             Long.class
     );
+
+    @Autowired
+    private Executor asyncExecutor;
 
     @PostConstruct
     public void initBloomFilter() {
@@ -212,7 +219,12 @@ public class BlogServiceImpl implements BlogService {
         long offset = (pageNum - 1) * pageSize;
         List<BlogInfo> records = blogMapper.selectPage(offset, pageSize, dto.getCategoryId(), dto.getKeyword(), dto.getUserId());
         Long total = blogMapper.countPage(dto.getCategoryId(), dto.getKeyword(), dto.getUserId());
-        List<BlogSummaryVO> data = records.stream().map(this::toSummary).toList();
+        List<BlogSummaryVO> data = records.stream()
+                .map(record -> CompletableFuture.supplyAsync(() -> toSummary(record), asyncExecutor))
+                .toList()
+                .stream()
+                .map(CompletableFuture::join)
+                .toList();
         return PageResult.of(total, pageNum, pageSize, data);
     }
 
