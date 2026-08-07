@@ -1,15 +1,22 @@
 package com.techdevhub.follow.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
+import com.techdevhub.follow.client.UserClient;
 import com.techdevhub.follow.entity.FollowInfo;
 import com.techdevhub.follow.mapper.FollowMapper;
 import com.techdevhub.follow.service.FollowService;
+import com.techdevhub.follow.vo.FollowersVO;
+import com.techdevhub.result.Result;
 import com.techdevhub.util.SnowflakeIdGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -17,10 +24,11 @@ public class FollowServiceImpl implements FollowService {
 
     private static final String FOLLOWING_KEY = "follow:user:";
     private static final String FOLLOWERS_KEY = "follow:fans:";
-
+    private final ObjectMapper objectMapper;
     private final FollowMapper followMapper;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final StringRedisTemplate stringRedisTemplate;
+    private final UserClient userClient;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -59,5 +67,19 @@ public class FollowServiceImpl implements FollowService {
         }
         stringRedisTemplate.opsForSet().remove(FOLLOWING_KEY + userId, String.valueOf(followUserId));
         stringRedisTemplate.opsForSet().remove(FOLLOWERS_KEY + followUserId, String.valueOf(userId));
+    }
+
+    public List<FollowersVO> getFollowers(Long userId){
+        List<Long> list = followMapper.getFollowers(userId);
+        List<FollowersVO> list1 = new ArrayList<>();
+        for (Long id:list){
+            Result result = userClient.getProfile(id);
+            if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
+                throw new BusinessException(ErrorCode.FOLLOW_USER_CLIENT_FAIL);
+            }
+            FollowersVO vo = objectMapper.convertValue(result.getData(), FollowersVO.class);
+            list1.add(vo);
+        }
+        return list1;
     }
 }

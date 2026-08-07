@@ -191,7 +191,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserInformationVO getPublicProfile(Long id) {
         UserInfo userInfo = userMapper.selectUserById(id);
-        if (userInfo == null || userInfo.getIsDelete() == null || userInfo.getIsDelete() != 0) {
+        // 仅当 is_delete 明确为 1(已注销)/2(已封禁) 才视为不存在。
+        // 历史数据/旧注册逻辑未写入该列会导致 NULL，应视为未删除（正常用户），
+        // 否则 login() 放行(NEW)但 getPublicProfile() 抛 USER_NOT_EXISTS，表现为"已登录却查无此人"。
+        if (userInfo == null || (userInfo.getIsDelete() != null && userInfo.getIsDelete() != 0)) {
             throw new BusinessException(ErrorCode.USER_NOT_EXISTS);
         }
         return toUserInformationVO(userInfo);

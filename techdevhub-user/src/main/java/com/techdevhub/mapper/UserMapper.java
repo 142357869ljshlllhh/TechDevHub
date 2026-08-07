@@ -32,9 +32,9 @@ public interface UserMapper {
     UserInfo  selectUserByEmail(String email);
 
     @Insert("""
-            insert into user_info 
-            (id,email,username,password)
-            values(#{id},#{email},#{username},#{password})
+            insert into user_info
+            (id,email,username,password,is_delete,status)
+            values(#{id},#{email},#{username},#{password},0,0)
             """)
     int register(@Param("id") Long id, @Param("username") String username, @Param("password") String password,@Param("email") String email);
 

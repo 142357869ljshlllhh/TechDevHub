@@ -7,7 +7,7 @@ import com.techdevhub.category.vo.CategoryVO;
 import java.util.List;
 
 public interface CategoryService {
-    List<CategoryVO> list(Long currentUserId);
+    List<CategoryVO> list();
 
     void create(Long currentUserId, CategoryCreateDTO dto);
 

@@ -10,6 +10,7 @@ import com.techdevhub.category.vo.CategoryVO;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
 import com.techdevhub.result.Result;
+import com.techdevhub.util.SnowflakeIdGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,10 +23,11 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryMapper categoryMapper;
     private final UserClient userClient;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Override
-    public List<CategoryVO> list(Long currentUserId) {
-        assertAdmin(currentUserId);
+    public List<CategoryVO> list() {
+        // 列出分类供所有登录用户写文章时选择，不需要管理员权限（仅 create/update/delete 保留 assertAdmin）
         return categoryMapper.selectAll().stream()
                 .map(c -> new CategoryVO(c.getId(), c.getCategoryName()))
                 .toList();
@@ -37,13 +39,12 @@ public class CategoryServiceImpl implements CategoryService {
         if (!StringUtils.hasText(dto.getCategoryName())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        if (categoryMapper.selectById(dto.getId()) != null) {
-            throw new BusinessException(ErrorCode.CATEGORY_ID_ALREADY_EXISTS);
-        }
         if (categoryMapper.selectByName(dto.getCategoryName().trim()) != null) {
             throw new BusinessException(ErrorCode.CATEGORY_NAME_ALREADY_EXISTS);
         }
-        int rows = categoryMapper.insert(dto.getId(), dto.getCategoryName().trim());
+        // id 由后端雪花算法生成，避免前端传入导致主键冲突
+        Long id = snowflakeIdGenerator.nextId();
+        int rows = categoryMapper.insert(id, dto.getCategoryName().trim());
         if (rows == 0) {
             throw new BusinessException(ErrorCode.CATEGORY_CREATE_FAILED);
         }

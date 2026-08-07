@@ -22,7 +22,7 @@ public class CategoryController {
 
     @GetMapping
     public Result list(HttpServletRequest request) {
-        return Result.success(categoryService.list(currentUserId(request)));
+        return Result.success(categoryService.list());
     }
 
     @PostMapping

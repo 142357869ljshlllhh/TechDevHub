@@ -1,16 +1,15 @@
 package com.techdevhub.follow.controller;
 
 import com.techdevhub.follow.service.FollowService;
+import com.techdevhub.follow.vo.FollowersVO;
 import com.techdevhub.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/follows")
@@ -32,6 +31,13 @@ public class FollowController {
     public Result unfollow(@PathVariable Long followUserId, HttpServletRequest request) {
         followService.unfollow(currentUserId(request), followUserId);
         return Result.success();
+    }
+
+    @GetMapping("/followers")
+    @Operation(summary = "获取粉丝列表")
+    public Result getFollowers(HttpServletRequest request){
+        List<FollowersVO> followersVO = followService.getFollowers(currentUserId(request));
+        return Result.success(followersVO);
     }
 
     private Long currentUserId(HttpServletRequest request) {

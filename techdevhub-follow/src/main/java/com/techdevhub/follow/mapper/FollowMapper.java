@@ -1,11 +1,14 @@
 package com.techdevhub.follow.mapper;
 
 import com.techdevhub.follow.entity.FollowInfo;
+import com.techdevhub.follow.vo.FollowersVO;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
 
 @Mapper
 public interface FollowMapper {
@@ -30,4 +33,10 @@ public interface FollowMapper {
             where id = #{id}
             """)
     int updateDeleteStatus(@Param("id") Long id, @Param("isDelete") Integer isDelete);
+
+    @Select("""
+       select follow_id from follow_info 
+       where user_id = #{id} and is_delete = 0
+       """)
+    List<Long> getFollowers(Long id);
 }

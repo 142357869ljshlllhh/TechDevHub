@@ -36,7 +36,7 @@ public interface CategoryMapper {
             insert into category_info (id, category_name)
             values (#{id}, #{categoryName})
             """)
-    int insert(@Param("id") Integer id, @Param("categoryName") String categoryName);
+    int insert(@Param("id") Long id, @Param("categoryName") String categoryName);
 
     @Update("""
             update category_info

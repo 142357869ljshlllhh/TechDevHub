@@ -46,6 +46,7 @@ public enum ErrorCode {
     FOLLOW_RELATION_NOT_FOUND(1301, "follow relation not found"),
     FOLLOW_CREATE_FAILED(1302, "follow failed"),
     FOLLOW_CANCEL_FAILED(1303, "unfollow failed"),
+    FOLLOW_USER_CLIENT_FAIL(1303,"get followers failed"),
 
     LIKE_ALREADY_CANCELLED(1400, "like relation already cancelled"),
     LIKE_RELATION_NOT_FOUND(1401, "like relation not found"),
