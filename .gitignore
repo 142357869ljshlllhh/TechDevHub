@@ -16,3 +16,7 @@ deploy/frontend-dist/
 /techdevhub-like/target/
 # WorkBuddy 项目数据（记忆/日志等）：本地保留，不进版本库
 /.workbuddy/
+
+# 交付文档 / 部署配置：本地保留，不进版本库（含生产凭据，禁止提交）
+/delivery/
+/deploy/
