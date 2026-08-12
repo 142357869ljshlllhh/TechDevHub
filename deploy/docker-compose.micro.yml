@@ -1,0 +1,355 @@
+# TechDevHub 微服务部署（2C2G 精简版，方案 B）
+# 特点：
+#   - 关闭 Nacos 服务发现（网关走 application-prod.yml 静态路由，省 ~350MB）
+#   - 每个服务 JVM 小堆（128MB）+ SerialGC
+#   - 每服务独立容器 + 内存上限 + 自动重启（单容器 OOM 不影响整机）
+# 用法：
+#   1) 本地先打包：mvn clean package -DskipTests
+#   2) 上传整个项目到服务器 /opt/techdevhub/
+#   3) docker compose -f deploy/docker-compose.micro.yml up -d --build
+#
+# ⚠️ 2G 内存跑 8 个 JVM 属于“极限尝试”：若频繁 OOM，请改用单体版
+#    docker-compose.prod.yml（见 DELIVERY/07 文档），或升级到 4G 机器。
+
+services:
+  # ===================== 基础设施 =====================
+  mysql-server:
+    image: mysql:8.0
+    container_name: tdh-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=150
+      - --innodb-buffer-pool-size=128M
+      - --innodb-log-file-size=32M
+      - --key-buffer-size=16M
+      - --table-open-cache=64
+      - --slow-query-log=1
+      - --long-query-time=2
+      - --log-error-verbosity=1
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-sql:/docker-entrypoint-initdb.d:ro   # 把你的 DDL 放这里（见下方说明）
+    ports:
+      - "127.0.0.1:3306:3306"
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 450M
+
+  redis-server:
+    image: redis:7-alpine
+    container_name: tdh-redis
+    restart: always
+    command: >
+      redis-server
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+
+  # ===================== 业务微服务 =====================
+  # 公共环境变量（每个服务都需要）
+  #   SPRING_CLOUD_NACOS_*_ENABLED=false  -> 关闭 Nacos，避免连不上注册中心导致启动失败
+  #   SPRING_DATA_REDIS_HOST             -> Redis 容器名
+  #   TECHDEVHUB_FEIGN_*_URL             -> 跨服务调用改走 Docker 服务名（不再是 localhost）
+
+  user-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-user/target/techdevhub-user-0.0.1-SNAPSHOT.jar
+    container_name: tdh-user
+    restart: always
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/user?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  blog-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-blog/target/techdevhub-blog-0.0.1-SNAPSHOT.jar
+    container_name: tdh-blog
+    restart: always
+    environment:
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/blog?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+      TECHDEVHUB_FEIGN_BLOG_SERVICE_URL: http://blog-service:8082
+    ports:
+      - "127.0.0.1:8082:8082"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  category-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-category/target/techdevhub-category-0.0.1-SNAPSHOT.jar
+    container_name: tdh-category
+    restart: always
+    environment:
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/category?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - "127.0.0.1:8083:8083"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  follow-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-follow/target/techdevhub-follow-0.0.1-SNAPSHOT.jar
+    container_name: tdh-follow
+    restart: always
+    environment:
+      SERVER_PORT: 8084
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/follow?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - "127.0.0.1:8084:8084"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  like-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-like/target/techdevhub-like-0.0.1-SNAPSHOT.jar
+    container_name: tdh-like
+    restart: always
+    environment:
+      SERVER_PORT: 8085
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/blog_like?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+      TECHDEVHUB_FEIGN_BLOG_SERVICE_URL: http://blog-service:8082
+    ports:
+      - "127.0.0.1:8085:8085"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  comment-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-comment/target/techdevhub-comment-0.0.1-SNAPSHOT.jar
+    container_name: tdh-comment
+    restart: always
+    environment:
+      SERVER_PORT: 8086
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/comment?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+      TECHDEVHUB_FEIGN_BLOG_SERVICE_URL: http://blog-service:8082
+    ports:
+      - "127.0.0.1:8086:8086"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 240M
+
+  ai-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-ai/target/techdevhub-ai-0.0.1-SNAPSHOT.jar
+    container_name: tdh-ai
+    restart: always
+    environment:
+      SERVER_PORT: 8088
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/ai?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-server
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+      TECHDEVHUB_FEIGN_USER_SERVICE_URL: http://user-service:8081
+      # ⚠️ 必须换成你真实的 DashScope API Key，否则 AI 模块启动可能报错/调用失败
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-your-dashscope-key-here}
+    ports:
+      - "127.0.0.1:8088:8088"
+    depends_on:
+      mysql-server:
+        condition: service_started
+      redis-server:
+        condition: service_started
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+
+  # ===================== 网关 =====================
+  gateway-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.service
+      args:
+        SERVICE_JAR: techdevhub-gateway/target/techdevhub-gateway-0.0.1-SNAPSHOT.jar
+    container_name: tdh-gateway
+    restart: always
+    environment:
+      SERVER_PORT: 8090
+      SPRING_PROFILES_ACTIVE: prod        # 关键：启用静态路由 + 关闭 Nacos
+      SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
+      SPRING_CLOUD_NACOS_CONFIG_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      - user-service
+      - blog-service
+      - category-service
+      - follow-service
+      - like-service
+      - comment-service
+      - ai-service
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 260M
+
+  # ===================== 前端 + 反代 =====================
+  nginx:
+    image: nginx:alpine
+    container_name: tdh-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.micro.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend-dist:/usr/share/nginx/html:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - gateway-service
+    networks:
+      - tdh-net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+volumes:
+  mysql_data:
+  redis_data:
+  nginx_logs:
+
+networks:
+  tdh-net:
+    driver: bridge
