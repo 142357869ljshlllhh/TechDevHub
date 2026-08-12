@@ -22,7 +22,7 @@ public interface CategoryMapper {
             where id = #{id}
             limit 1
             """)
-    CategoryInfo selectById(@Param("id") Integer id);
+    CategoryInfo selectById(@Param("id") Long id);
 
     @Select("""
             select id, category_name, is_delete
@@ -43,13 +43,13 @@ public interface CategoryMapper {
             set category_name = #{categoryName}
             where id = #{id} and is_delete = 0
             """)
-    int updateName(@Param("id") Integer id, @Param("categoryName") String categoryName);
+    int updateName(@Param("id") Long id, @Param("categoryName") String categoryName);
 
     @Update("""
             update category_info
             set is_delete = 1
             where id = #{id} and is_delete = 0
             """)
-    int logicDelete(@Param("id") Integer id);
+    int logicDelete(@Param("id") Long id);
 }
 

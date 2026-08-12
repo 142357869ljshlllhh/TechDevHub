@@ -37,3 +37,9 @@ techdevhub:
 
 server:
   port: 8085
+
+# Feign 使用 Apache HttpClient 5（原生支持 PATCH，避免 JDK HttpURLConnection 的 Invalid HTTP method: PATCH）
+# 注意：Spring Cloud 2025.0.0(OpenFeign 4.3.0) 已删除 HC4 自动配置，必须用 hc5，不能用 httpclient
+feign:
+  hc5:
+    enabled: true

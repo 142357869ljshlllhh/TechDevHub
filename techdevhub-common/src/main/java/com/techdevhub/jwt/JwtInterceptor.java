@@ -3,6 +3,7 @@ package com.techdevhub.jwt;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techdevhub.annotation.IgnoreToken;
 import com.techdevhub.config.JwtProperties;
+import com.techdevhub.context.UserContext;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
 import com.techdevhub.result.Result;
@@ -46,8 +47,12 @@ public class JwtInterceptor implements HandlerInterceptor {
 
         try {
             Long userId = jwtUtil.getUserId(token);
+            Boolean isAdmin = jwtUtil.getIsAdmin(token);
             request.setAttribute("currentUserId", userId);
             request.setAttribute("currentToken", token);
+            // 填充请求级上下文（ThreadLocal），供 Service 层直接读取，无需层层传参
+            UserContext.setUserId(userId);
+            UserContext.setIsAdmin(Boolean.TRUE.equals(isAdmin));
             return true;
         } catch (BusinessException e) {
             // token 过期/无效同样返回统一 Result，避免 500

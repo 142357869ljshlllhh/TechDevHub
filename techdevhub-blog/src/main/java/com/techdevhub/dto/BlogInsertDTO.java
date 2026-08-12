@@ -2,6 +2,8 @@ package com.techdevhub.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,6 +19,7 @@ public class BlogInsertDTO {
     private String title;
     @NotBlank(message = "内容不能为空")
     private String content;
-    @NotBlank(message = "文章类别不能为空")
-    private Integer categoryId;
+    @NotNull(message = "文章类别不能为空")
+    @Positive(message = "文章类别不合法")
+    private Long categoryId;
 }

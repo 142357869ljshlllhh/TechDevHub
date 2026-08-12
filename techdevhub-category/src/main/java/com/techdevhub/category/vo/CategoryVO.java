@@ -6,7 +6,7 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class CategoryVO {
-    private Integer id;
+    private Long id;
     private String categoryName;
 }
 

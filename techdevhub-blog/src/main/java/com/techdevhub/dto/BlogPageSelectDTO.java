@@ -12,7 +12,7 @@ public class BlogPageSelectDTO {
 
     private Long pageNum = 1L;
     private Long pageSize = 10L;
-    private Integer categoryId;
+    private Long categoryId;
     private String keyword;
     private Long userId;
 }

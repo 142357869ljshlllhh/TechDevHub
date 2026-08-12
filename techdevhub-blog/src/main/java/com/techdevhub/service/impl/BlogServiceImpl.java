@@ -2,6 +2,7 @@ package com.techdevhub.service.impl;
 
 import com.techdevhub.client.UserProfileClient;
 import com.techdevhub.client.vo.UserProfileVO;
+import com.techdevhub.context.UserContext;
 import com.techdevhub.dto.BlogCounterAdjustDTO;
 import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
@@ -85,7 +86,7 @@ public class BlogServiceImpl implements BlogService {
                 1_000_000,
                 0.01
         );
-        List<Long> ids = blogMapper.selectAllPublishedIds();
+        List<Long> ids = blogMapper.selectAllIds();
         for (Long id : ids) {
             blogBloomFilter.put(String.valueOf(id));
         }
@@ -101,6 +102,8 @@ public class BlogServiceImpl implements BlogService {
         blogInfo.setTitle(dto.getTitle());
         blogInfo.setContent(dto.getContent());
         blogInfo.setCategoryId(dto.getCategoryId());
+        // 发布即审核通过，立即可见（status: 审核中0 / 审核通过1 / 下架2）
+        blogInfo.setStatus(1);
         if(blogMapper.insert(blogInfo) == 0){
             throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
         }
@@ -133,7 +136,7 @@ public class BlogServiceImpl implements BlogService {
         BlogInfo blogInfo = requireOwnedBlog(userId, id);
         String title = StringUtils.hasText(dto.getTitle()) ? dto.getTitle().trim() : blogInfo.getTitle();
         String content = StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : blogInfo.getContent();
-        Integer categoryId = dto.getCategoryId() != null ? dto.getCategoryId() : blogInfo.getCategoryId();
+        Long categoryId = dto.getCategoryId() != null ? dto.getCategoryId() : blogInfo.getCategoryId();
         if (title.equals(blogInfo.getTitle()) && content.equals(blogInfo.getContent()) && categoryId.equals(blogInfo.getCategoryId())) {
             throw new BusinessException(ErrorCode.BLOG_CONTENT_NOT_CHANGED);
         }
@@ -170,7 +173,7 @@ public class BlogServiceImpl implements BlogService {
                         if (blogInfo == null
                                 || (blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 1)
                                 || blogInfo.getStatus() == null
-                                || blogInfo.getStatus() != 1) {
+                                || blogInfo.getStatus() == 2) {
                             stringRedisTemplate.opsForValue().set(
                                     cacheKey,
                                     BLOG_DETAIL_NULL_MARK,
@@ -360,18 +363,20 @@ public class BlogServiceImpl implements BlogService {
     private BlogSummaryVO toSummary(BlogInfo blogInfo) {
         String content = blogInfo.getContent() == null ? "" : blogInfo.getContent();
         String preview = content.length() > 50 ? content.substring(0, 50) + "..." : content;
-        return new BlogSummaryVO(
+        BlogSummaryVO vo = new BlogSummaryVO(
                 blogInfo.getId(),
                 blogInfo.getUserId(),
                 resolveAuthorUsername(blogInfo.getUserId()),
                 blogInfo.getTitle(),
                 preview,
                 blogInfo.getCategoryId(),
+                blogInfo.getStatus(),
                 readCounter(BLOG_LIKE_KEY + blogInfo.getId()),
                 readCounter(BLOG_VIEW_KEY + blogInfo.getId()),
                 readCounter(BLOG_COMMENT_KEY + blogInfo.getId()),
                 blogInfo.getCreateTime()
         );
+        return vo;
     }
 
 
@@ -384,6 +389,19 @@ public class BlogServiceImpl implements BlogService {
             throw new BusinessException(ErrorCode.BLOG_FORBIDDEN);
         }
         return blogInfo;
+    }
+
+    @Override
+    public void assertAdmin() {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        // isAdmin 来自 JWT 的 isAdmin claim，登录时按 user_info.status==1 写入，
+        // 已由 JwtInterceptor 解析进 UserContext，无需每次走 Feign 远程判定。
+        if (!UserContext.isAdmin()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
     }
 
     private BlogDetailVO toDetail(BlogInfo blogInfo) {
@@ -420,7 +438,7 @@ public class BlogServiceImpl implements BlogService {
         if (blogInfo == null || (blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 1)) {
             throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
         }
-        if (blogInfo.getStatus() == null || blogInfo.getStatus() != 1) {
+        if (blogInfo.getStatus() == null || blogInfo.getStatus() == 2) {
             throw new BusinessException(ErrorCode.BLOG_NOT_PULL);
         }
         return blogInfo;

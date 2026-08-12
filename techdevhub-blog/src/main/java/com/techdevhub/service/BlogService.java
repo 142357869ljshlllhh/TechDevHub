@@ -33,4 +33,6 @@ public interface BlogService {
 
     void changeStatus(Long blogId, Integer status);
 
+    void assertAdmin();
+
 }

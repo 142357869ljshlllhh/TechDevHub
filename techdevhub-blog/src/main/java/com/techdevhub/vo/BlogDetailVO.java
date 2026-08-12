@@ -17,7 +17,7 @@ public class BlogDetailVO {
     private String authorUsername;
     private String title;
     private String content;
-    private Integer categoryId;
+    private Long categoryId;
     private Integer likeCount;
     private Integer viewCount;
     private Integer commentCount;

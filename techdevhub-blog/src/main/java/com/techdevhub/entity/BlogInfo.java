@@ -16,7 +16,7 @@ public class BlogInfo {
     private Long userId;
     private String title;
     private String content;
-    private Integer categoryId;
+    private Long categoryId;
     private LocalDateTime createTime = LocalDateTime.now();
     private LocalDateTime updateTime = LocalDateTime.now();
     private Integer likeCount = 0;

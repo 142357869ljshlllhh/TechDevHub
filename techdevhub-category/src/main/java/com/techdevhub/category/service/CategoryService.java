@@ -11,8 +11,8 @@ public interface CategoryService {
 
     void create(Long currentUserId, CategoryCreateDTO dto);
 
-    void update(Long currentUserId, Integer id, CategoryUpdateDTO dto);
+    void update(Long currentUserId, Long id, CategoryUpdateDTO dto);
 
-    void delete(Long currentUserId, Integer id);
+    void delete(Long currentUserId, Long id);
 }
 

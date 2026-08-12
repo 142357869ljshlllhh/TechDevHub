@@ -1,5 +1,6 @@
 package com.techdevhub.category.controller;
 
+import com.techdevhub.annotation.IgnoreToken;
 import com.techdevhub.category.dto.CategoryCreateDTO;
 import com.techdevhub.category.dto.CategoryUpdateDTO;
 import com.techdevhub.category.service.CategoryService;
@@ -20,6 +21,7 @@ public class CategoryController {
         return (Long) request.getAttribute("currentUserId");
     }
 
+    @IgnoreToken
     @GetMapping
     public Result list(HttpServletRequest request) {
         return Result.success(categoryService.list());
@@ -32,7 +34,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
-    public Result update(@PathVariable Integer id,
+    public Result update(@PathVariable Long id,
                          @Valid @RequestBody CategoryUpdateDTO dto,
                          HttpServletRequest request) {
         categoryService.update(currentUserId(request), id, dto);
@@ -40,7 +42,7 @@ public class CategoryController {
     }
 
     @DeleteMapping("/{id}")
-    public Result delete(@PathVariable Integer id, HttpServletRequest request) {
+    public Result delete(@PathVariable Long id, HttpServletRequest request) {
         categoryService.delete(currentUserId(request), id);
         return Result.success();
     }

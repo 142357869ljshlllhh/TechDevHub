@@ -15,5 +15,5 @@ public class BlogUpdateDTO {
     @Schema(description = "内容")
     private String content;
     @Schema(description = "类别")
-    private Integer categoryId;
+    private Long categoryId;
 }

@@ -35,8 +35,8 @@ public interface FollowMapper {
     int updateDeleteStatus(@Param("id") Long id, @Param("isDelete") Integer isDelete);
 
     @Select("""
-       select follow_id from follow_info 
-       where user_id = #{id} and is_delete = 0
+       select user_id from follow_info
+       where follow_user_id = #{id} and is_delete = 0
        """)
     List<Long> getFollowers(Long id);
 }

@@ -1,6 +1,8 @@
 package com.techdevhub.config;
 
 import com.techdevhub.exception.GlobalExceptionHandler;
+import com.techdevhub.feign.TraceFeignInterceptor;
+import com.techdevhub.interceptor.TraceInterceptor;
 import com.techdevhub.jwt.JWTUtil;
 import com.techdevhub.jwt.JwtInterceptor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -32,8 +34,20 @@ public class CommonAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public WebMvcConfig webMvcConfig(JwtInterceptor jwtInterceptor, JwtProperties jwtProperties) {
-        return new WebMvcConfig(jwtInterceptor, jwtProperties);
+    public TraceInterceptor traceInterceptor() {
+        return new TraceInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public WebMvcConfig webMvcConfig(TraceInterceptor traceInterceptor, JwtInterceptor jwtInterceptor, JwtProperties jwtProperties) {
+        return new WebMvcConfig(traceInterceptor, jwtInterceptor, jwtProperties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TraceFeignInterceptor traceFeignInterceptor() {
+        return new TraceFeignInterceptor();
     }
 
     @Bean

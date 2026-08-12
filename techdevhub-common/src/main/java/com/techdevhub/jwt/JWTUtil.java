@@ -80,4 +80,19 @@ public class JWTUtil {
             throw new BusinessException(ErrorCode.TOKEN_INVALID);
         }
     }
+
+    /**
+     * 读取 token 中的 isAdmin claim（登录时按 user_info.status==1 写入）。
+     * 老 token（不含该 claim）或解析失败一律视为非管理员，向下兼容。
+     */
+    public Boolean getIsAdmin(String token){
+        Object value = parseToken(token).get("isAdmin");
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof String s) {
+            return Boolean.parseBoolean(s);
+        }
+        return false;
+    }
 }

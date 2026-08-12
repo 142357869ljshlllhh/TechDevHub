@@ -4,7 +4,7 @@ import lombok.Data;
 
 @Data
 public class CategoryInfo {
-    private Integer id;
+    private Long id;
     private String categoryName;
     private Integer isDelete;
 }

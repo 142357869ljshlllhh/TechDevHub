@@ -51,7 +51,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public void update(Long currentUserId, Integer id, CategoryUpdateDTO dto) {
+    public void update(Long currentUserId, Long id, CategoryUpdateDTO dto) {
         assertAdmin(currentUserId);
         CategoryInfo old = categoryMapper.selectById(id);
         if (old == null || (old.getIsDelete() != null && old.getIsDelete() == 1)) {
@@ -75,7 +75,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public void delete(Long currentUserId, Integer id) {
+    public void delete(Long currentUserId, Long id) {
         assertAdmin(currentUserId);
         int rows = categoryMapper.logicDelete(id);
         if (rows == 0) {

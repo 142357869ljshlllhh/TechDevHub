@@ -28,7 +28,7 @@ public interface BlogMapper {
             set title = #{title}, content = #{content}, category_id = #{categoryId}, update_time = now()
             where id = #{id}  and is_delete = 0
             """)
-    int updateBlog(@Param("id") Long id, @Param("title") String title, @Param("content") String content, @Param("categoryId") Integer categoryId);
+    int updateBlog(@Param("id") Long id, @Param("title") String title, @Param("content") String content, @Param("categoryId") Long categoryId);
 
     @Update("""
             update blog_info
@@ -53,7 +53,7 @@ public interface BlogMapper {
             </if>
             </script>
             """)
-    Long countPage(@Param("categoryId") Integer categoryId,
+    Long countPage(@Param("categoryId") Long categoryId,
                    @Param("keyword") String keyword,
                    @Param("userId") Long userId);
 
@@ -76,7 +76,7 @@ public interface BlogMapper {
             limit #{offset}, #{pageSize}
             </script>
             """)
-    List<BlogInfo> selectPage(@Param("offset") Long offset, @Param("pageSize") Long pageSize, @Param("categoryId") Integer categoryId, @Param("keyword") String keyword, @Param("userId") Long userId);
+    List<BlogInfo> selectPage(@Param("offset") Long offset, @Param("pageSize") Long pageSize, @Param("categoryId") Long categoryId, @Param("keyword") String keyword, @Param("userId") Long userId);
 
     @Select("""
             select id, user_id, title, content, category_id, create_time, update_time,
@@ -92,7 +92,7 @@ public interface BlogMapper {
             select id, user_id, title, content, category_id, create_time, update_time,
                    like_count, view_count, comment_count
             from blog_info
-            where user_id = #{userId} and is_delete = 0 and status = 1
+            where user_id = #{userId} and is_delete = 0
             order by update_time desc
             """)
     List<BlogInfo> selectByUserId(@Param("userId") Long userId);
@@ -119,6 +119,13 @@ public interface BlogMapper {
             where is_delete = 0 and status = 1
             """)
     List<Long> selectAllPublishedIds();
+
+    @Select("""
+            select id
+            from blog_info
+            where is_delete = 0
+            """)
+    List<Long> selectAllIds();
 
     @Update("""
             update blog_info

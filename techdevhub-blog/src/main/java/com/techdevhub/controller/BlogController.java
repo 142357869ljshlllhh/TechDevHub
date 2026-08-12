@@ -91,8 +91,19 @@ public class BlogController {
     }
 
     @GetMapping("/pending")
-    @Operation(summary = "查看待审核文章")
-    public Result pendingBlogs() {
+    @Operation(summary = "查看待审核文章（管理员）")
+    public Result pendingBlogs(HttpServletRequest request) {
+        blogService.assertAdmin();
         return Result.success(blogService.pendingBlogs());
+    }
+
+    @PatchMapping("/{blogId}/status")
+    @Operation(summary = "管理员修改文章审核状态（1=通过,2=驳回/下架）")
+    public Result changeStatus(@PathVariable Long blogId,
+                               @RequestParam Integer status,
+                               HttpServletRequest request) {
+        blogService.assertAdmin();
+        blogService.changeStatus(blogId, status);
+        return Result.success();
     }
 }

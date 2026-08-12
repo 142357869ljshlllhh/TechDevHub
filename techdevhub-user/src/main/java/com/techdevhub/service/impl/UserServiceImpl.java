@@ -26,6 +26,7 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -76,7 +77,9 @@ public class UserServiceImpl implements UserService {
         if(!bCryptPasswordEncoder.matches(dto.getPassword(),userInfo.getPassword())){
             throw new BusinessException(ErrorCode.USER_PASSWORD_IS_WORONG);
         }
-        String token = jwtUtil.gengerateToken(userInfo.getId());
+        // 是否管理员：user_info.status == 1（与 UserServiceImpl.isAdmin / blog 模块断言保持一致）
+        boolean isAdmin = userInfo.getStatus() != null && userInfo.getStatus() == 1;
+        String token = jwtUtil.gengerateToken(userInfo.getId(), Map.<String, Object>of("isAdmin", isAdmin));
         return new UserLoginVO(token,toUserInformationVO(userInfo));
     }
 
