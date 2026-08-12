@@ -7,6 +7,7 @@ import com.techdevhub.follow.client.UserClient;
 import com.techdevhub.follow.entity.FollowInfo;
 import com.techdevhub.follow.mapper.FollowMapper;
 import com.techdevhub.follow.service.FollowService;
+import com.techdevhub.follow.vo.FollowCountsVO;
 import com.techdevhub.follow.vo.FollowersVO;
 import com.techdevhub.result.Result;
 import com.techdevhub.util.SnowflakeIdGenerator;
@@ -81,5 +82,31 @@ public class FollowServiceImpl implements FollowService {
             list1.add(vo);
         }
         return list1;
+    }
+
+    @Override
+    public List<FollowersVO> getFollowing(Long userId) {
+        List<Long> list = followMapper.getFollowing(userId);
+        List<FollowersVO> list1 = new ArrayList<>();
+        for (Long id : list) {
+            Result result = userClient.getProfile(id);
+            if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
+                throw new BusinessException(ErrorCode.FOLLOW_USER_CLIENT_FAIL);
+            }
+            FollowersVO vo = objectMapper.convertValue(result.getData(), FollowersVO.class);
+            list1.add(vo);
+        }
+        return list1;
+    }
+
+    @Override
+    public boolean isFollowing(Long userId, Long targetUserId) {
+        FollowInfo relation = followMapper.selectRelation(userId, targetUserId);
+        return relation != null && relation.getIsDelete() != null && relation.getIsDelete() == 0;
+    }
+
+    @Override
+    public FollowCountsVO getCounts(Long userId) {
+        return new FollowCountsVO(followMapper.countFollowing(userId), followMapper.countFollowers(userId));
     }
 }

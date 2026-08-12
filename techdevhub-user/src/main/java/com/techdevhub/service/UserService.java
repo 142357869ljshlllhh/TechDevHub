@@ -29,4 +29,7 @@ public interface UserService {
     UserInformationVO getPublicProfile(Long id);
 
     boolean isAdmin(Long id);
+
+    // 按用户名模糊搜索用户（排除已注销/已封禁），用于用户发现与关注
+    java.util.List<UserInformationVO> searchUsers(String keyword);
 }

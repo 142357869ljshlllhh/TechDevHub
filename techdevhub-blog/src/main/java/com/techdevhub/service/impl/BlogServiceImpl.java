@@ -141,6 +141,9 @@ public class BlogServiceImpl implements BlogService {
             throw new BusinessException(ErrorCode.BLOG_CONTENT_NOT_CHANGED);
         }
         blogMapper.updateBlog(id, title, content, categoryId);
+        // 修复：文章更新后必须清除 Redis 详情缓存，否则详情接口会一直返回更新前的旧内容
+        // （表现为“提示修改成功，但文章内容并未改变”）。
+        stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + id);
         return toDetail(blogMapper.selectById(id));
     }
 
@@ -149,6 +152,8 @@ public class BlogServiceImpl implements BlogService {
     public void blogDelete(Long currentUserId, Long blogId) {
         requireOwnedBlog(currentUserId, blogId);
         blogMapper.logicDelete(blogId);
+        // 修复：删除后同样清除详情缓存，避免已删除文章仍可从缓存读到
+        stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + blogId);
     }
 
     @Override
@@ -275,6 +280,8 @@ public class BlogServiceImpl implements BlogService {
     @Override
     public void changeStatus(Long blogId, Integer status) {
         blogMapper.updateStatus(blogId, status);
+        // 审核状态变化会改变文章可见性，清除详情缓存（含可能存在的 NULL 标记）
+        stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + blogId);
     }
 
 

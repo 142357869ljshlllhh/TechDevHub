@@ -31,6 +31,15 @@ public interface UserMapper {
             """)
     UserInfo  selectUserByEmail(String email);
 
+    @Select("""
+            select id,username,email,password,is_delete,status,create_time,following_count,follower_count
+            from user_info
+            where is_delete = 0 and username like concat('%', #{keyword}, '%')
+            order by create_time asc
+            limit 50
+            """)
+    java.util.List<UserInfo> searchByUsername(@Param("keyword") String keyword);
+
     @Insert("""
             insert into user_info
             (id,email,username,password,is_delete,status)

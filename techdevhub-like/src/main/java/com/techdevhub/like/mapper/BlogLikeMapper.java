@@ -30,4 +30,12 @@ public interface BlogLikeMapper {
             where id = #{id}
             """)
     int updateDeleteStatus(@Param("id") Long id, @Param("isDelete") Integer isDelete);
+
+    @Select("""
+            select blog_id
+            from blog_like_info
+            where user_id = #{userId} and is_delete = 0
+              and blog_id in (<foreach collection='blogIds' item='id' open='' separator=',' close=''>#{id}</foreach>)
+            """)
+    java.util.List<Long> selectLikedBlogIds(@Param("userId") Long userId, @Param("blogIds") java.util.List<Long> blogIds);
 }

@@ -74,4 +74,30 @@ public class BlogLikeServiceImpl implements BlogLikeService {
         stringRedisTemplate.opsForSet().remove(BLOG_LIKED_USERS_KEY + blogId, String.valueOf(userId));
         stringRedisTemplate.opsForSet().remove(USER_LIKED_BLOGS_KEY + userId, String.valueOf(blogId));
     }
+
+    @Override
+    public boolean isLiked(Long userId, Long blogId) {
+        BlogLikeInfo relation = blogLikeMapper.selectRelation(userId, blogId);
+        return relation != null && relation.getIsDelete() != null && relation.getIsDelete() == 0;
+    }
+
+    @Override
+    public java.util.Map<Long, Boolean> batchIsLiked(Long userId, java.util.List<Long> blogIds) {
+        java.util.Map<Long, Boolean> result = new java.util.HashMap<>();
+        if (blogIds == null || blogIds.isEmpty()) {
+            return result;
+        }
+        // 默认全部未赞
+        for (Long blogId : blogIds) {
+            result.put(blogId, Boolean.FALSE);
+        }
+        // 用 DB 作为权威数据源（Redis 集合在并发下可能短暂不一致，DB 永远准确）
+        java.util.List<Long> liked = blogLikeMapper.selectLikedBlogIds(userId, blogIds);
+        if (liked != null) {
+            for (Long blogId : liked) {
+                result.put(blogId, Boolean.TRUE);
+            }
+        }
+        return result;
+    }
 }

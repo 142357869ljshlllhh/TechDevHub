@@ -34,10 +34,32 @@ public class FollowController {
     }
 
     @GetMapping("/followers")
-    @Operation(summary = "获取粉丝列表")
-    public Result getFollowers(HttpServletRequest request){
-        List<FollowersVO> followersVO = followService.getFollowers(currentUserId(request));
+    @Operation(summary = "获取粉丝列表（可传 userId 查他人，默认当前用户）")
+    public Result getFollowers(@RequestParam(value = "userId", required = false) Long userId, HttpServletRequest request){
+        Long target = userId != null ? userId : currentUserId(request);
+        List<FollowersVO> followersVO = followService.getFollowers(target);
         return Result.success(followersVO);
+    }
+
+    @GetMapping("/following")
+    @Operation(summary = "获取关注列表（可传 userId 查他人，默认当前用户）")
+    public Result getFollowing(@RequestParam(value = "userId", required = false) Long userId, HttpServletRequest request){
+        Long target = userId != null ? userId : currentUserId(request);
+        List<FollowersVO> followingVO = followService.getFollowing(target);
+        return Result.success(followingVO);
+    }
+
+    @GetMapping("/{followUserId}/is-following")
+    @Operation(summary = "查询当前用户是否关注了指定用户")
+    public Result isFollowing(@PathVariable Long followUserId, HttpServletRequest request){
+        return Result.success(followService.isFollowing(currentUserId(request), followUserId));
+    }
+
+    @GetMapping("/counts")
+    @Operation(summary = "获取关注数/粉丝数（默认当前用户，可传 userId 查他人）")
+    public Result counts(@RequestParam(value = "userId", required = false) Long userId, HttpServletRequest request){
+        Long target = userId != null ? userId : currentUserId(request);
+        return Result.success(followService.getCounts(target));
     }
 
     private Long currentUserId(HttpServletRequest request) {

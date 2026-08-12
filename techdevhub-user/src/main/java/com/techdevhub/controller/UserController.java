@@ -70,6 +70,12 @@ public class UserController {
         return Result.success(userService.isAdmin(id));
     }
 
+    @GetMapping("/search")
+    @Operation(summary = "按用户名模糊搜索用户（需登录），用于用户发现与关注")
+    public Result search(@RequestParam("keyword") String keyword) {
+        return Result.success(userService.searchUsers(keyword));
+    }
+
     @PutMapping("{id}")
     @Operation(summary = "用户修改信息信息接口",description = "只能修改自己的账户信息，修改后昵称已被使用、修改后邮箱已被使用",security = @SecurityRequirement(name = "BearerAuth"))
     @ApiResponses({

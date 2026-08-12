@@ -213,6 +213,22 @@ public class UserServiceImpl implements UserService {
                 && userInfo.getStatus() == 1;
     }
 
+    @Override
+    public java.util.List<UserInformationVO> searchUsers(String keyword) {
+        if (!org.springframework.util.StringUtils.hasText(keyword)) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.List<UserInfo> users = userMapper.searchByUsername(keyword.trim());
+        java.util.List<UserInformationVO> result = new java.util.ArrayList<>(users.size());
+        for (UserInfo u : users) {
+            // 仅返回正常用户（is_delete 明确非 0 的视为已注销/封禁，排除）
+            if (u.getIsDelete() != null && u.getIsDelete() == 0) {
+                result.add(toUserInformationVO(u));
+            }
+        }
+        return result;
+    }
+
 
 
 

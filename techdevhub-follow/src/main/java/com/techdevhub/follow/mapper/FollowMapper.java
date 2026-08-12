@@ -39,4 +39,22 @@ public interface FollowMapper {
        where follow_user_id = #{id} and is_delete = 0
        """)
     List<Long> getFollowers(Long id);
+
+    @Select("""
+       select follow_user_id from follow_info
+       where user_id = #{id} and is_delete = 0
+       """)
+    List<Long> getFollowing(Long id);
+
+    @Select("""
+       select count(1) from follow_info
+       where user_id = #{id} and is_delete = 0
+       """)
+    long countFollowing(@Param("id") Long id);
+
+    @Select("""
+       select count(1) from follow_info
+       where follow_user_id = #{id} and is_delete = 0
+       """)
+    long countFollowers(@Param("id") Long id);
 }
