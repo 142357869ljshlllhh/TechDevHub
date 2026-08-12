@@ -4,6 +4,7 @@ import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
 import com.techdevhub.like.client.BlogClient;
 import com.techdevhub.like.dto.BlogCounterAdjustRequest;
+import com.techdevhub.like.dto.LikeResult;
 import com.techdevhub.like.entity.BlogLikeInfo;
 import com.techdevhub.like.mapper.BlogLikeMapper;
 import com.techdevhub.like.service.BlogLikeService;
@@ -28,7 +29,7 @@ public class BlogLikeServiceImpl implements BlogLikeService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void like(Long userId, Long blogId) {
+    public LikeResult like(Long userId, Long blogId) {
         BlogLikeInfo relation = blogLikeMapper.selectRelation(userId, blogId);
         boolean needIncrease = false;
         if (relation == null) {
@@ -47,19 +48,25 @@ public class BlogLikeServiceImpl implements BlogLikeService {
             }
             needIncrease = true;
         }
+        // 仅在“点赞关系从无效变有效”时增减博客服务的展示计数，
+        // 保持幂等：重复点赞不会让 like_count 凭空 +1。
         if (needIncrease) {
-            Result result = blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(1));
-            if (result == null || result.getCode() == null || result.getCode() != 200) {
-                throw new BusinessException(ErrorCode.LIKE_CREATE_FAILED);
+            try {
+                blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(1));
+            } catch (Exception ignored) {
+                // 展示计数最终由 DB 真相校准，单次同步失败不影响主流程
             }
         }
         stringRedisTemplate.opsForSet().add(BLOG_LIKED_USERS_KEY + blogId, String.valueOf(userId));
         stringRedisTemplate.opsForSet().add(USER_LIKED_BLOGS_KEY + userId, String.valueOf(blogId));
+        // 以 blog_like_info 表实时统计作为权威点赞总数返回，前端据此校准按钮数字
+        Long likeCount = blogLikeMapper.countByBlogId(blogId);
+        return new LikeResult(true, likeCount == null ? 0L : likeCount);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void unlike(Long userId, Long blogId) {
+    public LikeResult unlike(Long userId, Long blogId) {
         BlogLikeInfo relation = blogLikeMapper.selectRelation(userId, blogId);
         if (relation == null || relation.getIsDelete() == null || relation.getIsDelete() == 1) {
             throw new BusinessException(ErrorCode.LIKE_RELATION_NOT_FOUND);
@@ -67,12 +74,15 @@ public class BlogLikeServiceImpl implements BlogLikeService {
         if (blogLikeMapper.updateDeleteStatus(relation.getId(), 1) == 0) {
             throw new BusinessException(ErrorCode.LIKE_CANCEL_FAILED);
         }
-        Result result = blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(-1));
-        if (result == null || result.getCode() == null || result.getCode() != 200) {
-            throw new BusinessException(ErrorCode.LIKE_CANCEL_FAILED);
+        try {
+            blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(-1));
+        } catch (Exception ignored) {
+            // 展示计数最终由 DB 真相校准，单次同步失败不影响主流程
         }
         stringRedisTemplate.opsForSet().remove(BLOG_LIKED_USERS_KEY + blogId, String.valueOf(userId));
         stringRedisTemplate.opsForSet().remove(USER_LIKED_BLOGS_KEY + userId, String.valueOf(blogId));
+        Long likeCount = blogLikeMapper.countByBlogId(blogId);
+        return new LikeResult(false, likeCount == null ? 0L : likeCount);
     }
 
     @Override

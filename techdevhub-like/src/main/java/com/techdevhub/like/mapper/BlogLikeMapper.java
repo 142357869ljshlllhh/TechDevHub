@@ -31,11 +31,13 @@ public interface BlogLikeMapper {
             """)
     int updateDeleteStatus(@Param("id") Long id, @Param("isDelete") Integer isDelete);
 
-    @Select("""
-            select blog_id
-            from blog_like_info
-            where user_id = #{userId} and is_delete = 0
-              and blog_id in (<foreach collection='blogIds' item='id' open='' separator=',' close=''>#{id}</foreach>)
-            """)
+    /** 批量查询用户已点赞的 blogId 列表（SQL 定义在 BlogLikeMapper.xml） */
     java.util.List<Long> selectLikedBlogIds(@Param("userId") Long userId, @Param("blogIds") java.util.List<Long> blogIds);
+
+    @Select("""
+            select count(*)
+            from blog_like_info
+            where blog_id = #{blogId} and is_delete = 0
+            """)
+    Long countByBlogId(@Param("blogId") Long blogId);
 }

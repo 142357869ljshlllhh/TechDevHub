@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.techdevhub.like.mapper.BlogLikeMapper">
+
+    <!-- 批量查询用户已点赞的 blogId 列表（XML 中 foreach item 变量解析稳定，避免 @Select 注解的 #{id} 作用域 bug） -->
+    <select id="selectLikedBlogIds" resultType="java.lang.Long">
+        select blog_id
+        from blog_like_info
+        where user_id = #{userId}
+          and is_delete = 0
+          and blog_id in
+          <foreach collection="blogIds" item="blogId" open="(" separator="," close=")">
+              #{blogId}
+          </foreach>
+    </select>
+
+</mapper>

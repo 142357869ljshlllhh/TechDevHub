@@ -25,15 +25,13 @@ public class BlogLikeController {
     @PostMapping("/{blogId}")
     @Operation(summary = "点赞文章")
     public Result like(@PathVariable Long blogId, HttpServletRequest request) {
-        blogLikeService.like(currentUserId(request), blogId);
-        return Result.success();
+        return Result.success(blogLikeService.like(currentUserId(request), blogId));
     }
 
     @DeleteMapping("/{blogId}")
     @Operation(summary = "取消点赞")
     public Result unlike(@PathVariable Long blogId, HttpServletRequest request) {
-        blogLikeService.unlike(currentUserId(request), blogId);
-        return Result.success();
+        return Result.success(blogLikeService.unlike(currentUserId(request), blogId));
     }
 
     @GetMapping("/{blogId}/status")
