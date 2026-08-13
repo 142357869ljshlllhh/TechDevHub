@@ -2,6 +2,7 @@ package com.techdevhub.category.controller;
 
 import com.techdevhub.annotation.IgnoreToken;
 import com.techdevhub.category.dto.CategoryCreateDTO;
+import com.techdevhub.category.dto.CategoryRejectDTO;
 import com.techdevhub.category.dto.CategoryUpdateDTO;
 import com.techdevhub.category.service.CategoryService;
 import com.techdevhub.result.Result;
@@ -44,6 +45,26 @@ public class CategoryController {
     @DeleteMapping("/{id}")
     public Result delete(@PathVariable Long id, HttpServletRequest request) {
         categoryService.delete(currentUserId(request), id);
+        return Result.success();
+    }
+
+    // ===== 管理员审核（审核入口在管理后台） =====
+    @GetMapping("/pending")
+    public Result listPending(HttpServletRequest request) {
+        return Result.success(categoryService.listPending(currentUserId(request)));
+    }
+
+    @PostMapping("/{id}/approve")
+    public Result approve(@PathVariable Long id, HttpServletRequest request) {
+        categoryService.approve(currentUserId(request), id);
+        return Result.success();
+    }
+
+    @PostMapping("/{id}/reject")
+    public Result reject(@PathVariable Long id,
+                         @Valid @RequestBody CategoryRejectDTO dto,
+                         HttpServletRequest request) {
+        categoryService.reject(currentUserId(request), id, dto.getReason());
         return Result.success();
     }
 }

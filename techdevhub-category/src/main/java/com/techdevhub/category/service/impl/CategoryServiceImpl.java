@@ -6,6 +6,7 @@ import com.techdevhub.category.dto.CategoryUpdateDTO;
 import com.techdevhub.category.entity.CategoryInfo;
 import com.techdevhub.category.mapper.CategoryMapper;
 import com.techdevhub.category.service.CategoryService;
+import com.techdevhub.category.vo.CategoryAuditVO;
 import com.techdevhub.category.vo.CategoryVO;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
@@ -27,7 +28,7 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public List<CategoryVO> list() {
-        // 列出分类供所有登录用户写文章时选择，不需要管理员权限（仅 create/update/delete 保留 assertAdmin）
+        // 公开列表：仅返回已通过(status=1)的类目；待审项由管理员在后台审核，不对外暴露
         return categoryMapper.selectAll().stream()
                 .map(c -> new CategoryVO(c.getId(), c.getCategoryName()))
                 .toList();
@@ -35,7 +36,10 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public void create(Long currentUserId, CategoryCreateDTO dto) {
-        assertAdmin(currentUserId);
+        // 普通登录用户即可提交新类目，进入待审核（status=0）；管理员审核通过后全员可用
+        if (currentUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         if (!StringUtils.hasText(dto.getCategoryName())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
@@ -44,7 +48,7 @@ public class CategoryServiceImpl implements CategoryService {
         }
         // id 由后端雪花算法生成，避免前端传入导致主键冲突
         Long id = snowflakeIdGenerator.nextId();
-        int rows = categoryMapper.insert(id, dto.getCategoryName().trim());
+        int rows = categoryMapper.insert(id, dto.getCategoryName().trim(), 0, currentUserId);
         if (rows == 0) {
             throw new BusinessException(ErrorCode.CATEGORY_CREATE_FAILED);
         }
@@ -81,6 +85,37 @@ public class CategoryServiceImpl implements CategoryService {
         if (rows == 0) {
             throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
         }
+    }
+
+    @Override
+    public List<CategoryAuditVO> listPending(Long currentUserId) {
+        assertAdmin(currentUserId);
+        return categoryMapper.selectPending().stream()
+                .map(c -> new CategoryAuditVO(c.getId(), c.getCategoryName(), c.getStatus(), c.getCreatorId(), c.getRejectReason()))
+                .toList();
+    }
+
+    @Override
+    public void approve(Long currentUserId, Long id) {
+        assertAdmin(currentUserId);
+        CategoryInfo old = categoryMapper.selectById(id);
+        if (old == null || (old.getIsDelete() != null && old.getIsDelete() == 1)) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        categoryMapper.approve(id);
+    }
+
+    @Override
+    public void reject(Long currentUserId, Long id, String reason) {
+        assertAdmin(currentUserId);
+        if (!StringUtils.hasText(reason)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
+        CategoryInfo old = categoryMapper.selectById(id);
+        if (old == null || (old.getIsDelete() != null && old.getIsDelete() == 1)) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        categoryMapper.reject(id, reason.trim());
     }
 
     private void assertAdmin(Long currentUserId) {

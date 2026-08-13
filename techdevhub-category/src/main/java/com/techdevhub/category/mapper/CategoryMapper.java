@@ -9,12 +9,20 @@ import java.util.List;
 public interface CategoryMapper {
 
     @Select("""
-            select id, category_name, is_delete
+            select id, category_name, is_delete, status, creator_id, reject_reason
             from category_info
-            where is_delete = 0
+            where is_delete = 0 and status = 1
             order by id asc
             """)
     List<CategoryInfo> selectAll();
+
+    @Select("""
+            select id, category_name, is_delete, status, creator_id, reject_reason
+            from category_info
+            where is_delete = 0 and status = 0
+            order by id asc
+            """)
+    List<CategoryInfo> selectPending();
 
     @Select("""
             select id, category_name, is_delete
@@ -33,10 +41,11 @@ public interface CategoryMapper {
     CategoryInfo selectByName(@Param("name") String name);
 
     @Insert("""
-            insert into category_info (id, category_name)
-            values (#{id}, #{categoryName})
+            insert into category_info (id, category_name, status, creator_id)
+            values (#{id}, #{categoryName}, #{status}, #{creatorId})
             """)
-    int insert(@Param("id") Long id, @Param("categoryName") String categoryName);
+    int insert(@Param("id") Long id, @Param("categoryName") String categoryName,
+               @Param("status") Integer status, @Param("creatorId") Long creatorId);
 
     @Update("""
             update category_info
@@ -51,5 +60,19 @@ public interface CategoryMapper {
             where id = #{id} and is_delete = 0
             """)
     int logicDelete(@Param("id") Long id);
+
+    @Update("""
+            update category_info
+            set status = 1, reject_reason = null
+            where id = #{id} and is_delete = 0
+            """)
+    int approve(@Param("id") Long id);
+
+    @Update("""
+            update category_info
+            set status = 2, reject_reason = #{reason}
+            where id = #{id} and is_delete = 0
+            """)
+    int reject(@Param("id") Long id, @Param("reason") String reason);
 }
 

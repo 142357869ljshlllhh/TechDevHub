@@ -2,6 +2,7 @@ package com.techdevhub.category.service;
 
 import com.techdevhub.category.dto.CategoryCreateDTO;
 import com.techdevhub.category.dto.CategoryUpdateDTO;
+import com.techdevhub.category.vo.CategoryAuditVO;
 import com.techdevhub.category.vo.CategoryVO;
 
 import java.util.List;
@@ -14,5 +15,11 @@ public interface CategoryService {
     void update(Long currentUserId, Long id, CategoryUpdateDTO dto);
 
     void delete(Long currentUserId, Long id);
+
+    List<CategoryAuditVO> listPending(Long currentUserId);
+
+    void approve(Long currentUserId, Long id);
+
+    void reject(Long currentUserId, Long id, String reason);
 }
 
