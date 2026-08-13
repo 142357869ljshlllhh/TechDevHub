@@ -72,7 +72,7 @@ public interface BlogMapper {
             <if test="userId != null">
                 and user_id = #{userId}
             </if>
-            order by view_count
+            order by create_time desc
             limit #{offset}, #{pageSize}
             </script>
             """)
@@ -80,7 +80,7 @@ public interface BlogMapper {
 
     @Select("""
             select id, user_id, title, content, category_id, create_time, update_time,
-                   like_count, view_count, comment_count
+                   like_count, view_count, comment_count, status
             from blog_info
             where is_delete = 0 and status = 1
             order by (view_count + like_count*2 + comment_count*3) desc
@@ -90,7 +90,7 @@ public interface BlogMapper {
 
     @Select("""
             select id, user_id, title, content, category_id, create_time, update_time,
-                   like_count, view_count, comment_count
+                   like_count, view_count, comment_count, status
             from blog_info
             where user_id = #{userId} and is_delete = 0
             order by update_time desc
@@ -106,7 +106,7 @@ public interface BlogMapper {
 
     @Select("""
             select id, user_id, title, content, category_id, create_time, update_time,
-                   like_count, view_count, comment_count
+                   like_count, view_count, comment_count, status
             from blog_info
             where is_delete = 0 and status = 0
             order by create_time asc
