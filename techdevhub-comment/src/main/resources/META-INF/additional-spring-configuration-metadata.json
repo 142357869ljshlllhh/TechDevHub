@@ -1,0 +1,10 @@
+{
+  "properties": [
+    {
+      "name": "feign.hc5.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": "false",
+      "description": "Spring Cloud OpenFeign 3.1.x 的 hc5 开关（该版本 jar 内缺失此属性的元数据，此处补齐消除 IDE 警告；运行时由 @ConditionalOnProperty 正常读取）。"
+    }
+  ]
+}

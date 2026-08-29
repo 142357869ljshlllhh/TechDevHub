@@ -40,7 +40,7 @@ class AiProxyControllerTest {
     @BeforeEach
     void setUp() {
         client = Mockito.mock(PythonAiClient.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AiProxyController(client))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AiProxyController(client, Mockito.mock(com.techdevhub.mapper.ChatTranscriptMapper.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

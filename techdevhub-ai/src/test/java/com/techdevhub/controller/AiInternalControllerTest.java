@@ -8,6 +8,7 @@ import com.techdevhub.dto.ai.QAResponse;
 import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.exception.AiCallException;
 import com.techdevhub.exception.GlobalExceptionHandler;
+import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.filter.InternalTokenFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,13 +29,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AiInternalControllerTest {
 
     private PythonAiClient client;
+    private ChatTranscriptMapper transcriptMapper;
     private MockMvc mockMvcWithToken;
     private MockMvc mockMvcWithoutToken;
 
     @BeforeEach
     void setUp() {
         client = Mockito.mock(PythonAiClient.class);
-        AiInternalController controller = new AiInternalController(client);
+        transcriptMapper = Mockito.mock(ChatTranscriptMapper.class);
+        AiInternalController controller = new AiInternalController(client, transcriptMapper);
 
         AiPythonProperties secured = new AiPythonProperties();
         secured.setInternalToken("secret-token");
@@ -116,5 +119,21 @@ class AiInternalControllerTest {
                         .contentType("application/json").content("{\"query\":\"q\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.rejected").value(true));
+    }
+
+    @Test
+    void transcriptBatch_insertsEachEntryAndReturnsCount() throws Exception {
+        String body = """
+                {"conversation_id":"conv-tx-001","user_id":42,
+                 "entries":[{"role":"user","content":"hi"},
+                            {"role":"assistant","content":"hello"}]}
+                """;
+        mockMvcWithToken.perform(post("/ai/internal/chat/transcript")
+                        .header("X-Internal-Token", "secret-token")
+                        .contentType("application/json").content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(2));
+        Mockito.verify(transcriptMapper, Mockito.times(2)).insert(any());
     }
 }

@@ -9,11 +9,15 @@ import com.techdevhub.dto.ai.RagIngestResult;
 import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.dto.ai.RecheckRequest;
 import com.techdevhub.dto.ai.RecheckResponse;
+import com.techdevhub.dto.ai.TranscriptBatchRequest;
+import com.techdevhub.entity.ChatTranscript;
+import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 失败语义透传：AiCallException 由全局处理器转 503/429/502 + AI_* 数字码，
  * blog 侧凭数字码还原 retryable，重试状态机的判断依据不丢。
  */
+@Slf4j
 @RestController
 @RequestMapping("/ai/internal")
 @RequiredArgsConstructor
@@ -34,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiInternalController {
 
     private final PythonAiClient pythonAiClient;
+    private final ChatTranscriptMapper chatTranscriptMapper;
 
     @PostMapping("/moderation/check")
     @Operation(summary = "内容审核（发布链路同步调用）")
@@ -57,5 +63,24 @@ public class AiInternalController {
     @Operation(summary = "RAG 问答（rejected=true 为正常业务结果）")
     public Result ragQuery(@Valid @RequestBody RagQueryRequest request) {
         return Result.success(pythonAiClient.ragQuery(request));
+    }
+
+    /**
+     * 会话记录批量写入（M7）：Python Agent 轮末回调，把本轮 user/assistant/event
+     * 消息落 chat_transcript。数据所有权在 Java 侧——Python 不连业务库，
+     * 用户可见的对话历史以此为唯一持久层（Redis 里那份是 LLM 工作记忆，允许有损）。
+     */
+    @PostMapping("/chat/transcript")
+    @Operation(summary = "会话记录批量写入（Python 轮末回调）")
+    public Result chatTranscript(@Valid @RequestBody TranscriptBatchRequest request) {
+        for (TranscriptBatchRequest.Entry entry : request.getEntries()) {
+            ChatTranscript record = new ChatTranscript();
+            record.setConversationId(request.getConversationId());
+            record.setUserId(request.getUserId());
+            record.setRole(entry.getRole());
+            record.setContent(entry.getContent());
+            chatTranscriptMapper.insert(record);
+        }
+        return Result.success(request.getEntries().size());
     }
 }

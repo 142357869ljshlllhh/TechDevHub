@@ -3,12 +3,16 @@ package com.techdevhub.controller;
 import com.techdevhub.client.PythonAiClient;
 import com.techdevhub.dto.ai.AgentChatRequest;
 import com.techdevhub.dto.ai.AgentChatResponse;
+import com.techdevhub.dto.ai.AgentHistoryMessage;
+import com.techdevhub.dto.ai.AgentHistoryResponse;
 import com.techdevhub.dto.ai.ChatReply;
 import com.techdevhub.dto.ai.ChatRequest;
-import com.techdevhub.dto.ai.QAResponse;
+import com.techdevhub.dto.ai.ConversationSummary;
 import com.techdevhub.dto.ai.RagQueryRequest;
+import com.techdevhub.entity.ChatTranscript;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
+import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.result.Result;
 import com.techdevhub.service.SseBridge;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,11 +22,19 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Python AI 服务前端代理端点（v2 适配层）。
@@ -41,6 +53,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class AiProxyController {
 
     private final PythonAiClient pythonAiClient;
+    private final ChatTranscriptMapper chatTranscriptMapper;
+
+    /** 历史回放每页条数：一屏足够，更早消息用 before_id 游标翻页 */
+    private static final int HISTORY_PAGE_SIZE = 50;
 
     private static Long requireUserId(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("currentUserId");
@@ -77,6 +93,49 @@ public class AiProxyController {
     }
 
     // ---------- 社区助手（两跳写确认） ----------
+
+    /**
+     * 会话历史回放（M7）：读 chat_transcript 持久层——与 LLM 工作记忆（Redis，压缩有损）
+     * 是两个存储；这里给用户看的是每轮完整的对话事实。归属内联在查询条件里，
+     * 非本人会话返回空列表，不泄露存在性。before_id 游标可选（加载更早消息）。
+     */
+    @GetMapping("/assistant/history")
+    @Operation(summary = "会话历史回放（MySQL 持久层，最新一页按时间正序返回）")
+    public Result assistantHistory(@RequestParam("conversation_id") String conversationId,
+                                   @RequestParam(value = "before_id", required = false) Long beforeId,
+                                   HttpServletRequest httpRequest) {
+        Long userId = requireUserId(httpRequest);
+        List<ChatTranscript> rows = chatTranscriptMapper.selectByConversation(
+                conversationId, userId, beforeId, HISTORY_PAGE_SIZE);
+        List<AgentHistoryMessage> messages = new ArrayList<>();
+        for (ChatTranscript row : rows) {
+            messages.add(new AgentHistoryMessage(row.getRole(), row.getContent(),
+                    row.getCreateTime() == null ? null
+                            : row.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
+        }
+        // 查询按 id 倒序取最新一页，返回给前端时翻回正序
+        Collections.reverse(messages);
+        return Result.success(new AgentHistoryResponse(conversationId, messages));
+    }
+
+    /** 用户的会话列表（侧边栏）：每个会话的最后一条消息作为预览。 */
+    @GetMapping("/assistant/conversations")
+    @Operation(summary = "历史会话列表（按最后活跃倒序，≤50 个）")
+    public Result assistantConversations(HttpServletRequest httpRequest) {
+        Long userId = requireUserId(httpRequest);
+        List<Map<String, Object>> rows = chatTranscriptMapper.selectConversationsByUser(userId, 50);
+        List<ConversationSummary> summaries = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            summaries.add(new ConversationSummary(
+                    (String) row.get("conversationId"),
+                    (String) row.get("lastRole"),
+                    (String) row.get("lastMessage"),
+                    row.get("lastTime") == null ? null
+                            : ((java.time.LocalDateTime) row.get("lastTime"))
+                            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
+        }
+        return Result.success(summaries);
+    }
 
     @PostMapping("/assistant/chat")
     @Operation(summary = "社区助手对话（pending_action 非空时需用户确认后二次调用）")

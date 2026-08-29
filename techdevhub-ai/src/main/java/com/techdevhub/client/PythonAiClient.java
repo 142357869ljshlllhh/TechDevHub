@@ -4,7 +4,6 @@ import com.techdevhub.config.AiPythonProperties;
 import com.techdevhub.context.UserContext;
 import com.techdevhub.dto.ai.AgentChatRequest;
 import com.techdevhub.dto.ai.AgentChatResponse;
-import com.techdevhub.dto.ai.AgentHistoryResponse;
 import com.techdevhub.dto.ai.AiErrorEnvelope;
 import com.techdevhub.dto.ai.ChatReply;
 import com.techdevhub.dto.ai.ChatRequest;
@@ -107,31 +106,6 @@ public class PythonAiClient {
 
     public AgentChatResponse agentChat(AgentChatRequest request, Long userId) {
         return post("/api/v1/agent/chat", request, AgentChatResponse.class, userId, false);
-    }
-
-    /**
-     * 会话历史回放（GET，前端刷新后恢复消息列表）。
-     * 403（会话不属于该用户）经信封翻译成 AiCallException(retryable=false)，由代理层透传前端。
-     */
-    public AgentHistoryResponse agentHistory(String conversationId, Long userId) {
-        try {
-            return syncClient.get()
-                    .uri(uriBuilder -> uriBuilder.path("/api/v1/agent/history")
-                            .queryParam("conversation_id", conversationId)
-                            .build())
-                    .headers(h -> injectHeaders(h, userId, false))
-                    .retrieve()
-                    .onStatus(status -> status.isError(),
-                            resp -> resp.bodyToMono(String.class)
-                                    .defaultIfEmpty("")
-                                    .map(raw -> toAiCallException(resp.statusCode().value(), raw)))
-                    .bodyToMono(AgentHistoryResponse.class)
-                    .block(Duration.ofSeconds(15));
-        } catch (AiCallException e) {
-            throw e;
-        } catch (Exception e) {
-            throw translateTransport(e);
-        }
     }
 
     // ---------- 流式端点（返回原始 SSE 帧流，透传层负责转发） ----------
