@@ -8,6 +8,7 @@ import com.techdevhub.vo.BlogDetailVO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.vo.BlogSummaryVO;
 
+import com.techdevhub.entity.RagIndexStatus;
 import java.util.List;
 
 public interface BlogService {
@@ -54,4 +55,15 @@ public interface BlogService {
      */
     int recheckBlogs(java.util.List<Long> blogIds);
 
+
+    // ---------- 向量索引管理（M10，管理员） ----------
+
+    /** 向量索引状态列表（status 可选：pending/ok/failed/removed） */
+    List<RagIndexStatus> ragIndexStatus(String status);
+
+    /** 单篇重新入库（取原文重新走 ingest 旁路） */
+    void reingestRag(Long blogId);
+
+    /** 全量重建：所有已发布文章重新入库（幂等），返回处理篇数 */
+    int rebuildRag();
 }

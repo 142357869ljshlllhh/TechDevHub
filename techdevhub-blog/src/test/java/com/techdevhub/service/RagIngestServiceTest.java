@@ -27,12 +27,14 @@ class RagIngestServiceTest {
 
     @Mock
     private AiServiceClient aiServiceClient;
+    @Mock
+    private com.techdevhub.mapper.RagIndexStatusMapper ragIndexStatusMapper;
 
     private RagIngestService service;
 
     @BeforeEach
     void setUp() {
-        service = new RagIngestService(aiServiceClient);
+        service = new RagIngestService(aiServiceClient, ragIndexStatusMapper);
     }
 
     private static BlogInfo blog() {

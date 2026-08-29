@@ -138,4 +138,28 @@ public class BlogController {
         blogService.assertAdmin();
         return Result.success(blogService.recheckBlogs(dto.getBlogIds()));
     }
+
+    // ---------- 向量索引管理（M10，管理员） ----------
+
+    @GetMapping("/rag/index-status")
+    @Operation(summary = "向量索引状态列表（管理员；status 可选 pending/ok/failed/removed）")
+    public Result ragIndexStatus(@RequestParam(required = false) String status) {
+        blogService.assertAdmin();
+        return Result.success(blogService.ragIndexStatus(status));
+    }
+
+    @PostMapping("/rag/reingest/{blogId}")
+    @Operation(summary = "单篇重新入库（失败补偿重试）")
+    public Result ragReingest(@PathVariable Long blogId) {
+        blogService.assertAdmin();
+        blogService.reingestRag(blogId);
+        return Result.success();
+    }
+
+    @PostMapping("/rag/rebuild")
+    @Operation(summary = "全量重建向量索引（所有已发布文章重新入库，幂等）")
+    public Result ragRebuild() {
+        blogService.assertAdmin();
+        return Result.success(blogService.rebuildRag());
+    }
 }

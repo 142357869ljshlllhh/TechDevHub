@@ -4,6 +4,8 @@ import com.techdevhub.dto.ai.AiResult;
 import com.techdevhub.dto.ai.ModerationCheckRequest;
 import com.techdevhub.dto.ai.ModerationResult;
 import com.techdevhub.dto.ai.QAResponse;
+import com.techdevhub.dto.ai.RagDeleteRequest;
+import com.techdevhub.dto.ai.RagDeleteResponse;
 import com.techdevhub.dto.ai.RagIngestRequest;
 import com.techdevhub.dto.ai.RagIngestResult;
 import com.techdevhub.dto.ai.RagQueryRequest;
@@ -37,4 +39,7 @@ public interface AiServiceClient {
 
     @PostMapping("/rag/query")
     AiResult<QAResponse> query(@RequestBody RagQueryRequest request);
+
+    @PostMapping("/rag/delete")
+    AiResult<RagDeleteResponse> ragDelete(@RequestBody RagDeleteRequest request);
 }

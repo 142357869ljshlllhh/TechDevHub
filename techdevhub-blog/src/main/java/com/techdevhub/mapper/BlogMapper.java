@@ -133,4 +133,7 @@ public interface BlogMapper {
             where id = #{id}
             """)
     int updateCounters(@Param("id") Long id, @Param("likeCount") Integer likeCount, @Param("viewCount") Integer viewCount, @Param("commentCount") Integer commentCount);
+
+    @Select("select id,user_id,title,content,category_id,status,create_time,update_time,comment_count,like_count,view_count from blog_info where status = 1 and is_delete = 0")
+    List<BlogInfo> selectPublished();
 }

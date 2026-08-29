@@ -8,6 +8,7 @@ import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.dto.BlogUpdateDTO;
 import com.techdevhub.entity.BlogInfo;
+import com.techdevhub.entity.RagIndexStatus;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
 import com.techdevhub.mapper.BlogMapper;
@@ -61,6 +62,8 @@ public class BlogServiceImpl implements BlogService {
     private final ObjectMapper objectMapper;
     private final UserProfileClient userProfileClient;
     private final ModerationFlowService moderationFlowService;
+    private final com.techdevhub.service.RagIngestService ragIngestService;
+    private final com.techdevhub.mapper.RagIndexStatusMapper ragIndexStatusMapper;
 
     private static final String BLOG_VIEW_KEY = "blog:view:";
     private static final String BLOG_VIEW_WINDOW_KEY = "blog:view:window:";
@@ -158,6 +161,20 @@ public class BlogServiceImpl implements BlogService {
         }
     }
 
+    /** 事务提交后异步移除向量语料（与审核触发同一 afterCommit 模式，防事务回滚误删） */
+    private void triggerRagRemoveAfterCommit(Long blogId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    ragIngestService.deleteAsync(blogId);
+                }
+            });
+        } else {
+            ragIngestService.deleteAsync(blogId);
+        }
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BlogDetailVO blogUpdate(Long userId,Long id, BlogUpdateDTO dto){
@@ -184,6 +201,10 @@ public class BlogServiceImpl implements BlogService {
             reModerate.setContent(content);
             // 更新重审语义：改回 status=0（审核中，对用户不可见），通过后恢复发布
             blogMapper.updateStatus(id, 0);
+            // 编辑即出库（M10）：立即移除旧全文的向量语料（旧内容已不可见，
+            // 不允许 RAG 在重审窗口期继续引用它）；重审通过后 ingest 会以
+            // 整篇替换语义重建新全文。afterCommit：事务回滚则不删。
+            triggerRagRemoveAfterCommit(id);
             triggerModerationAfterCommit(reModerate);
         }
         return toDetail(blogMapper.selectById(id));
@@ -196,6 +217,8 @@ public class BlogServiceImpl implements BlogService {
         blogMapper.logicDelete(blogId);
         // 修复：删除后同样清除详情缓存，避免已删除文章仍可从缓存读到
         stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + blogId);
+        // 向量语料同步出库（M10）：防止已删除文章仍被 RAG 检索引用
+        triggerRagRemoveAfterCommit(blogId);
     }
 
     @Override
@@ -350,6 +373,16 @@ public class BlogServiceImpl implements BlogService {
         blogMapper.updateStatus(blogId, status);
         // 审核状态变化会改变文章可见性，清除详情缓存（含可能存在的 NULL 标记）
         stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + blogId);
+        // 向量语料生命周期（M10）：下架/驳回 → 出库；转人工被采纳（人工通过）→ 入库。
+        // 与 AI 审核路径（ModerationFlowService 直接 updateStatus）互不重叠，无双重触发
+        if (Integer.valueOf(2).equals(status)) {
+            ragIngestService.deleteAsync(blogId);
+        } else if (Integer.valueOf(1).equals(status)) {
+            BlogInfo fresh = blogMapper.selectById(blogId);
+            if (fresh != null) {
+                ragIngestService.ingest(fresh);
+            }
+        }
     }
 
     @Override
@@ -677,5 +710,28 @@ public class BlogServiceImpl implements BlogService {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    // ---------- 向量索引管理（M10，管理员） ----------
+
+    @Override
+    public List<RagIndexStatus> ragIndexStatus(String status) {
+        return ragIndexStatusMapper.selectList(status);
+    }
+
+    @Override
+    public void reingestRag(Long blogId) {
+        BlogInfo blog = blogMapper.selectById(blogId);
+        if (blog == null || (blog.getIsDelete() != null && blog.getIsDelete() == 1)) {
+            throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
+        }
+        ragIngestService.ingest(blog);
+    }
+
+    @Override
+    public int rebuildRag() {
+        List<BlogInfo> blogs = blogMapper.selectPublished();
+        blogs.forEach(ragIngestService::ingest);
+        return blogs.size();
     }
 }

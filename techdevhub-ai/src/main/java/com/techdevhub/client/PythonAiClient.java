@@ -12,6 +12,8 @@ import com.techdevhub.dto.ai.ModerationResult;
 import com.techdevhub.dto.ai.QAResponse;
 import com.techdevhub.dto.ai.RagIngestRequest;
 import com.techdevhub.dto.ai.RagIngestResult;
+import com.techdevhub.dto.ai.RagDeleteRequest;
+import com.techdevhub.dto.ai.RagDeleteResponse;
 import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.dto.ai.RecheckRequest;
 import com.techdevhub.dto.ai.RecheckResponse;
@@ -92,6 +94,10 @@ public class PythonAiClient {
 
     public RagIngestResult ragIngest(RagIngestRequest request) {
         return post("/api/v1/rag/ingest", request, RagIngestResult.class, null, false);
+    }
+
+    public RagDeleteResponse ragDelete(RagDeleteRequest request) {
+        return post("/api/v1/rag/delete", request, RagDeleteResponse.class, null, false);
     }
 
     // ---------- 同步端点（人类级：需要 X-User-Id） ----------

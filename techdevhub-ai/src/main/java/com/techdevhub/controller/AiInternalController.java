@@ -6,6 +6,8 @@ import com.techdevhub.dto.ai.ModerationResult;
 import com.techdevhub.dto.ai.QAResponse;
 import com.techdevhub.dto.ai.RagIngestRequest;
 import com.techdevhub.dto.ai.RagIngestResult;
+import com.techdevhub.dto.ai.RagDeleteRequest;
+import com.techdevhub.dto.ai.RagDeleteResponse;
 import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.dto.ai.RecheckRequest;
 import com.techdevhub.dto.ai.RecheckResponse;
@@ -60,6 +62,12 @@ public class AiInternalController {
     @Operation(summary = "RAG 摄取（幂等，可无限补偿重试）")
     public Result ragIngest(@Valid @RequestBody RagIngestRequest request) {
         return Result.success(pythonAiClient.ragIngest(request));
+    }
+
+    @PostMapping("/rag/delete")
+    @Operation(summary = "知识库移除（删除/下架/编辑出库；幂等）")
+    public Result ragDelete(@Valid @RequestBody RagDeleteRequest request) {
+        return Result.success(pythonAiClient.ragDelete(request));
     }
 
     @PostMapping("/rag/query")
