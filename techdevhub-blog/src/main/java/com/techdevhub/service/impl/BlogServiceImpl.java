@@ -14,6 +14,7 @@ import com.techdevhub.mapper.BlogMapper;
 import com.techdevhub.result.PageResult;
 import com.techdevhub.result.Result;
 import com.techdevhub.service.BlogService;
+import com.techdevhub.service.ModerationFlowService;
 import com.techdevhub.util.SnowflakeIdGenerator;
 import com.techdevhub.vo.BlogDetailVO;
 import com.techdevhub.vo.BlogSummaryVO;
@@ -30,6 +31,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
@@ -43,6 +46,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -53,6 +60,7 @@ public class BlogServiceImpl implements BlogService {
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final UserProfileClient userProfileClient;
+    private final ModerationFlowService moderationFlowService;
 
     private static final String BLOG_VIEW_KEY = "blog:view:";
     private static final String BLOG_VIEW_WINDOW_KEY = "blog:view:window:";
@@ -102,8 +110,9 @@ public class BlogServiceImpl implements BlogService {
         blogInfo.setTitle(dto.getTitle());
         blogInfo.setContent(dto.getContent());
         blogInfo.setCategoryId(dto.getCategoryId());
-        // 发布即审核通过，立即可见（status: 审核中0 / 审核通过1 / 下架2）
-        blogInfo.setStatus(1);
+        // 先发后审：status=0 审核中，ModerationFlowService 审核后流转 1（通过）/
+        // 2（拒绝）；review 或服务故障停在 0 等人工（契约映射见 docs/java_ai_integration_plan.md §2.2）
+        blogInfo.setStatus(0);
         if(blogMapper.insert(blogInfo) == 0){
             throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
         }
@@ -124,7 +133,29 @@ public class BlogServiceImpl implements BlogService {
         blogDetailVO.setCommentCount(0);
         blogDetailVO.setLikeCount(0);
         blogDetailVO.setViewCount(0);
+        // 审核必须等事务提交后再触发（异步线程读不到未提交数据），
+        // 且 30s 级 LLM 调用不能占住发布请求线程
+        triggerModerationAfterCommit(blogInfo);
         return blogDetailVO;
+    }
+
+    /**
+     * 事务提交后异步触发审核。
+     * 为什么用 afterCommit 而不是直接 @Async：事务内提交异步任务，任务可能在
+     * commit 前执行，异步线程读库会看不到这条博客；事务回滚时审核也不该发生。
+     */
+    private void triggerModerationAfterCommit(BlogInfo blog) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    moderationFlowService.moderate(blog);
+                }
+            });
+        } else {
+            // 无事务上下文（如单测直调）时兜底直接触发
+            moderationFlowService.moderate(blog);
+        }
     }
 
     @Override
@@ -144,6 +175,17 @@ public class BlogServiceImpl implements BlogService {
         // 修复：文章更新后必须清除 Redis 详情缓存，否则详情接口会一直返回更新前的旧内容
         // （表现为“提示修改成功，但文章内容并未改变”）。
         stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + id);
+        // 内容变更需要重审（标题/正文不变只调分类的场景不重审，减少 LLM 消耗）
+        if (!title.equals(blogInfo.getTitle()) || !content.equals(blogInfo.getContent())) {
+            BlogInfo reModerate = new BlogInfo();
+            reModerate.setId(id);
+            reModerate.setUserId(userId);
+            reModerate.setTitle(title);
+            reModerate.setContent(content);
+            // 更新重审语义：改回 status=0（审核中，对用户不可见），通过后恢复发布
+            blogMapper.updateStatus(id, 0);
+            triggerModerationAfterCommit(reModerate);
+        }
         return toDetail(blogMapper.selectById(id));
     }
 
@@ -227,8 +269,11 @@ public class BlogServiceImpl implements BlogService {
         long offset = (pageNum - 1) * pageSize;
         List<BlogInfo> records = blogMapper.selectPage(offset, pageSize, dto.getCategoryId(), dto.getKeyword(), dto.getUserId());
         Long total = blogMapper.countPage(dto.getCategoryId(), dto.getKeyword(), dto.getUserId());
+        // 批量解析作者名：N 条博客无论多少不同作者，只发 1 次 Feign 批量请求（消除 N+1）
+        Map<Long, String> usernameMap = batchResolveAuthorUsernames(
+                records.stream().map(BlogInfo::getUserId).collect(Collectors.toSet()));
         List<BlogSummaryVO> data = records.stream()
-                .map(record -> CompletableFuture.supplyAsync(() -> toSummary(record), asyncExecutor))
+                .map(record -> CompletableFuture.supplyAsync(() -> toSummary(record, usernameMap), asyncExecutor))
                 .toList()
                 .stream()
                 .map(CompletableFuture::join)
@@ -239,25 +284,37 @@ public class BlogServiceImpl implements BlogService {
     @Override
     public List<BlogSummaryVO> hotTop10() {
         Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet().reverseRangeWithScores(BLOG_HOT_RANK_KEY, 0, 9);
+        List<BlogInfo> blogs = new ArrayList<>();
         if (CollectionUtils.isEmpty(tuples)) {
-            return blogMapper.selectTopByHot(10).stream().map(this::toSummary).toList();
-        }
-        List<BlogSummaryVO> result = new ArrayList<>();
-        for (ZSetOperations.TypedTuple<String> tuple : tuples) {
-            if (tuple == null || tuple.getValue() == null) {
-                continue;
+            blogs.addAll(blogMapper.selectTopByHot(10));
+        } else {
+            for (ZSetOperations.TypedTuple<String> tuple : tuples) {
+                if (tuple == null || tuple.getValue() == null) {
+                    continue;
+                }
+                BlogInfo blogInfo = blogMapper.selectById(Long.valueOf(tuple.getValue()));
+                if (blogInfo != null && blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 0 && blogInfo.getStatus() == 1) {
+                    blogs.add(blogInfo);
+                }
             }
-            BlogInfo blogInfo = blogMapper.selectById(Long.valueOf(tuple.getValue()));
-            if (blogInfo != null && blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 0 && blogInfo.getStatus() == 1) {
-                result.add(toSummary(blogInfo));
-            }
         }
-        return result;
+        if (blogs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, String> usernameMap = batchResolveAuthorUsernames(
+                blogs.stream().map(BlogInfo::getUserId).collect(Collectors.toSet()));
+        return blogs.stream().map(b -> toSummary(b, usernameMap)).toList();
     }
 
     @Override
     public List<BlogSummaryVO> currentUserBlogs(Long currentUserId) {
-        return blogMapper.selectByUserId(currentUserId).stream().map(this::toSummary).toList();
+        List<BlogInfo> records = blogMapper.selectByUserId(currentUserId);
+        if (records.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, String> usernameMap = batchResolveAuthorUsernames(
+                records.stream().map(BlogInfo::getUserId).collect(Collectors.toSet()));
+        return records.stream().map(b -> toSummary(b, usernameMap)).toList();
     }
 
     @Override
@@ -282,6 +339,48 @@ public class BlogServiceImpl implements BlogService {
         blogMapper.updateStatus(blogId, status);
         // 审核状态变化会改变文章可见性，清除详情缓存（含可能存在的 NULL 标记）
         stringRedisTemplate.delete(BLOG_DETAIL_CACHE_KEY + blogId);
+    }
+
+    @Override
+    public Long createDraft(Long userId, String title, String content) {
+        BlogInfo draft = new BlogInfo();
+        Long id = snowflakeIdGenerator.nextId();
+        draft.setId(id);
+        draft.setUserId(userId);
+        draft.setTitle(title);
+        draft.setContent(content);
+        draft.setStatus(0); // 草稿=审核中态复用，不触发审核也不进热榜
+        if (blogMapper.insert(draft) == 0) {
+            throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
+        }
+        // 计数器与发布路径同款初始化：草稿日后发布时计数器已就绪，避免 NPE
+        stringRedisTemplate.opsForValue().set(BLOG_VIEW_KEY + id, "0");
+        stringRedisTemplate.opsForValue().set(BLOG_LIKE_KEY + id, "0");
+        stringRedisTemplate.opsForValue().set(BLOG_COMMENT_KEY + id, "0");
+        if (blogBloomFilter != null) {
+            blogBloomFilter.put(String.valueOf(id));
+        }
+        return id;
+    }
+
+    @Override
+    public List<BlogInfo> draftsOf(Long userId) {
+        // status=0 即"未发布"：涵盖用户手存草稿与审核中文章的集合语义，
+        // 对 get_drafts 工具来说"还没发出去的"就是草稿
+        return blogMapper.selectByUserId(userId).stream()
+                .filter(b -> b.getStatus() != null && b.getStatus() == 0 && (b.getIsDelete() == null || b.getIsDelete() == 0))
+                .toList();
+    }
+
+    @Override
+    public int recheckBlogs(List<Long> blogIds) {
+        // 只重审存在且未删除的文章（被删除的文章重审无意义）
+        List<BlogInfo> blogs = blogIds.stream()
+                .map(blogMapper::selectById)
+                .filter(b -> b != null && (b.getIsDelete() == null || b.getIsDelete() == 0))
+                .toList();
+        moderationFlowService.recheck(blogs);
+        return blogs.size();
     }
 
 
@@ -368,12 +467,21 @@ public class BlogServiceImpl implements BlogService {
     }
 
     private BlogSummaryVO toSummary(BlogInfo blogInfo) {
+        return toSummary(blogInfo, null);
+    }
+
+    private BlogSummaryVO toSummary(BlogInfo blogInfo, Map<Long, String> usernameMap) {
         String content = blogInfo.getContent() == null ? "" : blogInfo.getContent();
         String preview = content.length() > 50 ? content.substring(0, 50) + "..." : content;
+        // 优先用批量解析结果，未覆盖时降级为单条兜底（保持原行为）
+        String username = usernameMap != null ? usernameMap.get(blogInfo.getUserId()) : null;
+        if (username == null) {
+            username = resolveAuthorUsername(blogInfo.getUserId());
+        }
         BlogSummaryVO vo = new BlogSummaryVO(
                 blogInfo.getId(),
                 blogInfo.getUserId(),
-                resolveAuthorUsername(blogInfo.getUserId()),
+                username,
                 blogInfo.getTitle(),
                 preview,
                 blogInfo.getCategoryId(),
@@ -488,6 +596,60 @@ public class BlogServiceImpl implements BlogService {
         } catch (JsonProcessingException ignored) {
             return fetchFromUserServiceAndCache(userId);
         }
+    }
+
+    /**
+     * 批量解析作者名：先批量查 Redis 缓存，未命中的只发一次 Feign 批量请求，
+     * 把 N 条不同作者的并发 N+1 RPC 收敛成 1 次，并回填缓存（含同页其余同作者博客）。
+     */
+    private Map<Long, String> batchResolveAuthorUsernames(Set<Long> userIds) {
+        Map<Long, String> result = new HashMap<>();
+        if (userIds == null || userIds.isEmpty()) {
+            return result;
+        }
+        Set<Long> missIds = new HashSet<>();
+        for (Long userId : userIds) {
+            if (userId == null) {
+                continue;
+            }
+            String cached = stringRedisTemplate.opsForValue().get(USER_PROFILE_CACHE_KEY + userId);
+            if (StringUtils.hasText(cached)) {
+                try {
+                    String username = objectMapper.readTree(cached).path("username").asText(null);
+                    if (StringUtils.hasText(username)) {
+                        result.put(userId, username);
+                        continue;
+                    }
+                } catch (JsonProcessingException ignored) {
+                    // 缓存内容异常，走远程回源
+                }
+            }
+            missIds.add(userId);
+        }
+        if (!missIds.isEmpty()) {
+            try {
+                Result remote = userProfileClient.batchGetProfiles(new ArrayList<>(missIds));
+                if (remote != null && remote.getCode() != null && remote.getCode() == 200 && remote.getData() != null) {
+                    List<UserProfileVO> vos = objectMapper.convertValue(remote.getData(),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<UserProfileVO>>() {});
+                    for (UserProfileVO vo : vos) {
+                        if (vo == null || vo.getId() == null) {
+                            continue;
+                        }
+                        result.put(vo.getId(), vo.getUsername());
+                        // 回填 Redis 缓存，后续请求直接命中
+                        UserProfileVO cacheVo = new UserProfileVO();
+                        cacheVo.setId(vo.getId());
+                        cacheVo.setUsername(vo.getUsername());
+                        stringRedisTemplate.opsForValue().set(USER_PROFILE_CACHE_KEY + vo.getId(),
+                                objectMapper.writeValueAsString(cacheVo));
+                    }
+                }
+            } catch (Exception ignored) {
+                // 批量失败时降级为逐个兜底，不影响列表返回
+            }
+        }
+        return result;
     }
 
     private String fetchFromUserServiceAndCache(Long userId) {

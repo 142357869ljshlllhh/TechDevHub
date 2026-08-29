@@ -36,3 +36,12 @@ techdevhub:
       - /blogs/swagger-ui/**
       - /blogs/swagger-ui.html
       - /blogs/v3/api-docs/**
+      # Python AI 工具回调端点：走 X-Internal-Token 门禁（InternalApiController 内校验），
+      # 不走用户 JWT——调用方是 Python 服务（携带 X-User-Id 头标识用户），不是登录用户浏览器
+      - /api/v1/internal/**
+  feign:
+    # ai-service 的内部转发端点（/ai/internal/**）经此调用，绕过网关少一跳
+    ai-service-url: ${AI_SERVICE_URL:http://localhost:8088}
+  # 服务间门禁 token：与 techdevhub-ai / Python 侧 .env 的 INTERNAL_TOKEN 同值
+  # （同一环境变量 AI_INTERNAL_TOKEN 注入三个服务，改一处全链路生效）
+  internal-token: ${AI_INTERNAL_TOKEN:}

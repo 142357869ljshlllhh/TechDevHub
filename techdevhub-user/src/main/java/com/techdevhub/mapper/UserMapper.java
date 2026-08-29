@@ -4,6 +4,8 @@ package com.techdevhub.mapper;
 import com.techdevhub.entity.UserInfo;
 import org.apache.ibatis.annotations.*;
 
+import java.util.List;
+
 @Mapper
 public interface UserMapper {
 
@@ -82,6 +84,13 @@ public interface UserMapper {
             """)
     int unbanUser(@Param("id") Long id);
 
+    @Select("<script>" +
+            "select id, username, is_delete, status " +
+            "from user_info " +
+            "where id in " +
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>" +
+            "</script>")
+    List<UserInfo> batchSelectByIds(@Param("ids") List<Long> ids);
 
 }
 

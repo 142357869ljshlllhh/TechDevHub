@@ -38,7 +38,17 @@ techdevhub:
       - /ai/swagger-ui/**
       - /ai/swagger-ui.html
       - /ai/v3/api-docs/**
+      # 内部转发端点走 X-Internal-Token 门禁（T4 的 InternalTokenFilter），
+      # 不走用户 JWT：审核在异步线程执行，没有用户请求上下文可透传 Authorization
+      - /ai/internal/**
   ai:
+    python:
+      # Python AI 微服务（FastAPI），对端契约见 techdevhub-agent/docs/java_integration_deploy.md
+      base-url: ${AI_PYTHON_BASE_URL:http://localhost:8000}
+      # 与 Python 侧 .env 的 INTERNAL_TOKEN 同值；留空=门禁关闭仅限本地联调，生产必配
+      internal-token: ${AI_INTERNAL_TOKEN:}
+      # 与 Python 侧 .env 的 ADMIN_TOKEN 同值，仅 recheck 端点附加
+      admin-token: ${AI_ADMIN_TOKEN:}
     memory:
       max-messages: 20
 

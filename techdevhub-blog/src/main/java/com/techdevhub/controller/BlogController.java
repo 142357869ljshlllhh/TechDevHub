@@ -5,6 +5,7 @@ import com.techdevhub.dto.BlogCounterAdjustDTO;
 import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.dto.BlogUpdateDTO;
+import com.techdevhub.dto.ModerationRecheckDTO;
 import com.techdevhub.result.Result;
 import com.techdevhub.service.BlogService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -105,5 +106,12 @@ public class BlogController {
         blogService.assertAdmin();
         blogService.changeStatus(blogId, status);
         return Result.success();
+    }
+
+    @PostMapping("/moderation/recheck")
+    @Operation(summary = "管理员一键 AI 重审（≤50 篇/批；审核服务故障时整批 503，可整批重试）")
+    public Result recheck(@Valid @RequestBody ModerationRecheckDTO dto) {
+        blogService.assertAdmin();
+        return Result.success(blogService.recheckBlogs(dto.getBlogIds()));
     }
 }

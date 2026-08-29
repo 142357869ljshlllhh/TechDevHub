@@ -56,7 +56,17 @@ public enum ErrorCode {
     COMMENT_NOT_FOUND(1500, "comment not found"),
     COMMENT_CREATE_FAILED(1501, "comment create failed"),
     COMMENT_DELETE_FAILED(1502, "comment delete failed"),
-    COMMENT_PARENT_INVALID(1503, "comment parent invalid");
+    COMMENT_PARENT_INVALID(1503, "comment parent invalid"),
+
+    // ---- AI 集成段（1600+）：与 Python AI 微服务交互相关。
+    // 数字码只用于 Java 内部 Result 信封；对端两段式字符串码（如 MODERATION_LLM_TEMPORARY）
+    // 在 AiCallException.aiCode 中原样保留，两套体系不混用。
+    AI_SERVICE_TEMPORARY(1600, "AI service temporarily unavailable, retry later"),
+    AI_SERVICE_PERMANENT(1601, "AI service rejected the request, retry is meaningless"),
+    AI_SERVICE_RATE_LIMITED(1602, "AI service rate limited, backoff longer"),
+    AI_SERVICE_BAD_REQUEST(1603, "AI service rejected the payload (validation)"),
+    AI_INTERNAL_UNAUTHORIZED(1604, "missing or wrong internal token"),
+    AI_FORBIDDEN(1605, "forbidden by AI service (ownership/admin check failed)");
 
     private final Integer code;
     private final String message;

@@ -8,7 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(AiMemoryProperties.class)
+// 追加 AiPythonProperties：Python 适配层（T0）与旧 langchain4j 配置在此一并启用
+@EnableConfigurationProperties({AiMemoryProperties.class, AiPythonProperties.class})
 public class AiModuleConfiguration {
 
     @Bean

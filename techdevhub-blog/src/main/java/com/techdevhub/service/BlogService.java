@@ -35,4 +35,19 @@ public interface BlogService {
 
     void assertAdmin();
 
+    /**
+     * 创建博客草稿（供 Python Agent 写工具 create_draft 回调，T7）。
+     * 草稿 status=0 不触发审核、不进热榜；返回雪花 id。
+     */
+    Long createDraft(Long userId, String title, String content);
+
+    /** 查询用户草稿列表（status=0 未发布文章，供 Python 工具 get_drafts 回调）。 */
+    java.util.List<com.techdevhub.entity.BlogInfo> draftsOf(Long userId);
+
+    /**
+     * 管理端批量重审（T8）：按 blogId 加载文章并同步调用重审，结果按 verdict 流转状态。
+     * 对端整批 fail-fast：任一篇组件故障整批 503（幂等可整批重试）。
+     */
+    int recheckBlogs(java.util.List<Long> blogIds);
+
 }

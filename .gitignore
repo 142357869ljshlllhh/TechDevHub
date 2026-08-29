@@ -14,6 +14,14 @@ deploy/frontend-dist/
 /techdevhub-follow/target/
 /techdevhub-gateway/target/
 /techdevhub-like/target/
+/techdevhub-blog/target/
+/techdevhub-user/target/add
 /.workbuddy/
 /delivery/
+/scripts
+/docs
+/db
+/.workbuddy
+/deploy
+
 

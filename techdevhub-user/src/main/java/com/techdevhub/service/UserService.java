@@ -32,4 +32,7 @@ public interface UserService {
 
     // 按用户名模糊搜索用户（排除已注销/已封禁），用于用户发现与关注
     java.util.List<UserInformationVO> searchUsers(String keyword);
+
+    // 批量查询公开作者信息，用于博客列表聚合，避免 N+1 远程调用
+    java.util.List<UserInformationVO> batchGetPublicProfiles(java.util.List<Long> ids);
 }

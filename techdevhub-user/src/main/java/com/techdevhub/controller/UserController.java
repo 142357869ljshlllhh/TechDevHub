@@ -64,6 +64,13 @@ public class UserController {
     }
 
     @IgnoreToken
+    @PostMapping("/profiles/batch")
+    @Operation(summary = "批量查询作者公开信息接口", description = "接收用户ID列表，返回对应公开用户信息，用于博客列表聚合，避免逐条RPC造成N+1")
+    public Result batchProfiles(@RequestBody java.util.List<Long> ids) {
+        return Result.success(userService.batchGetPublicProfiles(ids));
+    }
+
+    @IgnoreToken
     @GetMapping("/{id}/admin-status")
     @Operation(summary = "查询是否管理员接口")
     public Result adminStatus(@PathVariable Long id) {

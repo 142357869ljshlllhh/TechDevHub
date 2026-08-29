@@ -234,6 +234,23 @@ public class UserServiceImpl implements UserService {
 
 
 
+    @Override
+    public java.util.List<UserInformationVO> batchGetPublicProfiles(java.util.List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.List<UserInfo> users = userMapper.batchSelectByIds(ids);
+        java.util.List<UserInformationVO> result = new java.util.ArrayList<>(users.size());
+        for (UserInfo u : users) {
+            // 排除已注销(1)/已封禁(2)，与 getPublicProfile 语义一致
+            if (u != null && u.getIsDelete() != null && u.getIsDelete() == 0
+                    && org.springframework.util.StringUtils.hasText(u.getUsername())) {
+                result.add(toUserInformationVO(u));
+            }
+        }
+        return result;
+    }
+
     private void checkUsernameUnique(String username) {
         if(userMapper.selectUserByUsername(username) !=null){
             throw new BusinessException(ErrorCode.USER_USERNAME_IS_USED);
