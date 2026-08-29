@@ -19,6 +19,6 @@ public class JwtProperties {
             "/users/register",
             "/users/login",
             "/error",
-            "/actuatot/**"
+            "/actuator/**"
     ));
 }
