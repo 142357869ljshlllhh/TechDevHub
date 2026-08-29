@@ -4,7 +4,6 @@ import com.techdevhub.entity.ChatTranscript;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
-import java.util.Map;
 
 @Mapper
 public interface ChatTranscriptMapper {
@@ -35,25 +34,11 @@ public interface ChatTranscriptMapper {
                                               @Param("beforeId") Long beforeId,
                                               @Param("limit") int limit);
 
-    /**
-     * 用户的会话列表：按 conversation_id 聚合，取每个会话最后一条消息作为预览。
-     * 子查询先圈定每个会话的 MAX(id)，再回表取该行——避免全量排序。
-     */
-    @Select("""
-            select t.conversation_id as conversationId,
-                   t.role            as lastRole,
-                   t.content         as lastMessage,
-                   t.create_time     as lastTime
-            from chat_transcript t
-            join (
-                select conversation_id, max(id) as max_id
-                from chat_transcript
-                where user_id = #{userId}
-                group by conversation_id
-            ) m on t.id = m.max_id
-            order by t.create_time desc
-            limit #{limit}
+    /** 删除会话的全部消息明细（删除会话时由 Controller 连带调用，归属校验在注册表删除处已做） */
+    @Delete("""
+            delete from chat_transcript
+            where conversation_id = #{conversationId} and user_id = #{userId}
             """)
-    List<Map<String, Object>> selectConversationsByUser(@Param("userId") Long userId,
-                                                        @Param("limit") int limit);
+    int deleteByConversation(@Param("conversationId") String conversationId,
+                             @Param("userId") Long userId);
 }

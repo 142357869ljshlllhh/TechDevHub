@@ -66,7 +66,8 @@ public enum ErrorCode {
     AI_SERVICE_RATE_LIMITED(1602, "AI service rate limited, backoff longer"),
     AI_SERVICE_BAD_REQUEST(1603, "AI service rejected the payload (validation)"),
     AI_INTERNAL_UNAUTHORIZED(1604, "missing or wrong internal token"),
-    AI_FORBIDDEN(1605, "forbidden by AI service (ownership/admin check failed)");
+    AI_FORBIDDEN(1605, "forbidden by AI service (ownership/admin check failed)"),
+    AI_CONVERSATION_NOT_FOUND(1606, "conversation not found");
 
     private final Integer code;
     private final String message;

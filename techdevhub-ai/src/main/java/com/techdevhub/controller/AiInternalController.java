@@ -10,7 +10,9 @@ import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.dto.ai.RecheckRequest;
 import com.techdevhub.dto.ai.RecheckResponse;
 import com.techdevhub.dto.ai.TranscriptBatchRequest;
+import com.techdevhub.entity.ChatConversation;
 import com.techdevhub.entity.ChatTranscript;
+import com.techdevhub.mapper.ChatConversationMapper;
 import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +42,7 @@ public class AiInternalController {
 
     private final PythonAiClient pythonAiClient;
     private final ChatTranscriptMapper chatTranscriptMapper;
+    private final ChatConversationMapper chatConversationMapper;
 
     @PostMapping("/moderation/check")
     @Operation(summary = "内容审核（发布链路同步调用）")
@@ -81,6 +84,13 @@ public class AiInternalController {
             record.setContent(entry.getContent());
             chatTranscriptMapper.insert(record);
         }
+        // 会话注册表：首次写入登记（带标题），之后仅补标题（若仍为空）+ 刷新活跃时间
+        chatConversationMapper.insertIgnore(request.getConversationId(),
+                request.getUserId(), request.getTitle());
+        if (request.getTitle() != null) {
+            chatConversationMapper.updateTitleIfNull(request.getConversationId(), request.getTitle());
+        }
+        chatConversationMapper.touch(request.getConversationId());
         return Result.success(request.getEntries().size());
     }
 }

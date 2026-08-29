@@ -12,6 +12,7 @@ import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.entity.ChatTranscript;
 import com.techdevhub.enums.ErrorCode;
 import com.techdevhub.exception.BusinessException;
+import com.techdevhub.mapper.ChatConversationMapper;
 import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.result.Result;
 import com.techdevhub.service.SseBridge;
@@ -22,7 +23,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -54,6 +57,7 @@ public class AiProxyController {
 
     private final PythonAiClient pythonAiClient;
     private final ChatTranscriptMapper chatTranscriptMapper;
+    private final ChatConversationMapper chatConversationMapper;
 
     /** 历史回放每页条数：一屏足够，更早消息用 before_id 游标翻页 */
     private static final int HISTORY_PAGE_SIZE = 50;
@@ -118,16 +122,17 @@ public class AiProxyController {
         return Result.success(new AgentHistoryResponse(conversationId, messages));
     }
 
-    /** 用户的会话列表（侧边栏）：每个会话的最后一条消息作为预览。 */
+    /** 用户的会话列表（侧边栏）：注册表（标题）+ 最后一条消息预览。 */
     @GetMapping("/assistant/conversations")
-    @Operation(summary = "历史会话列表（按最后活跃倒序，≤50 个）")
+    @Operation(summary = "历史会话列表（标题优先，按最后活跃倒序，≤50 个）")
     public Result assistantConversations(HttpServletRequest httpRequest) {
         Long userId = requireUserId(httpRequest);
-        List<Map<String, Object>> rows = chatTranscriptMapper.selectConversationsByUser(userId, 50);
+        List<Map<String, Object>> rows = chatConversationMapper.selectConversationsByUser(userId, 50);
         List<ConversationSummary> summaries = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             summaries.add(new ConversationSummary(
                     (String) row.get("conversationId"),
+                    (String) row.get("title"),
                     (String) row.get("lastRole"),
                     (String) row.get("lastMessage"),
                     row.get("lastTime") == null ? null
@@ -135,6 +140,21 @@ public class AiProxyController {
                             .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
         }
         return Result.success(summaries);
+    }
+
+    /** 删除会话（仅限归属人）：注册表 + 消息明细一并删除，不可恢复。 */
+    @DeleteMapping("/assistant/conversations/{conversationId}")
+    @Operation(summary = "删除历史会话（归属校验，注册表与明细同删）")
+    public Result deleteConversation(@PathVariable("conversationId") String conversationId,
+                                     HttpServletRequest httpRequest) {
+        Long userId = requireUserId(httpRequest);
+        int deleted = chatConversationMapper.deleteConversation(conversationId, userId);
+        if (deleted == 0) {
+            // 会话不存在或非本人：一律 404，不泄露存在性
+            throw new BusinessException(ErrorCode.AI_CONVERSATION_NOT_FOUND);
+        }
+        chatTranscriptMapper.deleteByConversation(conversationId, userId);
+        return Result.success(true);
     }
 
     @PostMapping("/assistant/chat")

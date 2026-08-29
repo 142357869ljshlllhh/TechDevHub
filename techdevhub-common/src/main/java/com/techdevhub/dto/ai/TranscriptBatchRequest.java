@@ -28,6 +28,10 @@ public class TranscriptBatchRequest {
     @JsonProperty("user_id")
     private Long userId;
 
+    /** 会话标题（Python 首轮 LLM 生成；NULL=本轮不涉及标题） */
+    @JsonProperty("title")
+    private String title;
+
     @Valid
     @NotEmpty(message = "entries 不能为空")
     private List<Entry> entries;

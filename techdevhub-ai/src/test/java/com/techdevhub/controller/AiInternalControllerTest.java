@@ -8,6 +8,7 @@ import com.techdevhub.dto.ai.QAResponse;
 import com.techdevhub.dto.ai.RagQueryRequest;
 import com.techdevhub.exception.AiCallException;
 import com.techdevhub.exception.GlobalExceptionHandler;
+import com.techdevhub.mapper.ChatConversationMapper;
 import com.techdevhub.mapper.ChatTranscriptMapper;
 import com.techdevhub.filter.InternalTokenFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,6 +31,7 @@ class AiInternalControllerTest {
 
     private PythonAiClient client;
     private ChatTranscriptMapper transcriptMapper;
+    private ChatConversationMapper conversationMapper;
     private MockMvc mockMvcWithToken;
     private MockMvc mockMvcWithoutToken;
 
@@ -37,7 +39,8 @@ class AiInternalControllerTest {
     void setUp() {
         client = Mockito.mock(PythonAiClient.class);
         transcriptMapper = Mockito.mock(ChatTranscriptMapper.class);
-        AiInternalController controller = new AiInternalController(client, transcriptMapper);
+        conversationMapper = Mockito.mock(ChatConversationMapper.class);
+        AiInternalController controller = new AiInternalController(client, transcriptMapper, conversationMapper);
 
         AiPythonProperties secured = new AiPythonProperties();
         secured.setInternalToken("secret-token");
