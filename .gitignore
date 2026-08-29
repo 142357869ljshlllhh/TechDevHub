@@ -23,5 +23,7 @@ deploy/frontend-dist/
 /db
 /.workbuddy
 /deploy
+/.zcode
+/resume
 
 

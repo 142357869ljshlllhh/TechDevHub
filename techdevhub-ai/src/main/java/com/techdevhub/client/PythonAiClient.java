@@ -4,6 +4,7 @@ import com.techdevhub.config.AiPythonProperties;
 import com.techdevhub.context.UserContext;
 import com.techdevhub.dto.ai.AgentChatRequest;
 import com.techdevhub.dto.ai.AgentChatResponse;
+import com.techdevhub.dto.ai.AgentHistoryResponse;
 import com.techdevhub.dto.ai.AiErrorEnvelope;
 import com.techdevhub.dto.ai.ChatReply;
 import com.techdevhub.dto.ai.ChatRequest;
@@ -18,6 +19,7 @@ import com.techdevhub.dto.ai.RecheckResponse;
 import com.techdevhub.exception.AiCallException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -36,8 +38,8 @@ import java.time.Duration;
  * Python AI 微服务唯一客户端（ai-service 是全系统唯一直连 Python 的 Java 模块）。
  *
  * 设计要点：
- * 1. 双 WebClient 实例——同步调用 read timeout 30s（LLM 生成慢），流式调用不设 read
- *    timeout、靠 15s 心跳判活。为什么不能共用：超时参数长在 HttpClient 上，无法按请求覆盖。
+ * 1. 双 WebClient 实例——同步调用 read timeout 30s（LLM 生成慢），流式调用不设整体
+ *    超时（长回答），但配 120s 读空闲兜底（心跳 15s，静默 120s 即判定半开连接）。为什么不能共用：超时参数长在 HttpClient 上，无法按请求覆盖。
  * 2. 失败统一翻译：非 2xx 读 AiErrorEnvelope 信封 → AiCallException；
  *    网络层故障（连不上/超时）→ AiCallException.transport（retryable=true）。
  * 3. 请求头在此统一注入，调用方不再感知门禁细节。
@@ -61,8 +63,12 @@ public class PythonAiClient {
         HttpClient syncHttp = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                 .responseTimeout(Duration.ofSeconds(30));
+        // 流式不设整体 responseTimeout（长回答），但 120s 读空闲兜底：
+        // 心跳 15s，正常流远不会静默 120s——半开连接/心跳停发时强制断开，
+        // 防止 Servlet 异步上下文 + netty 连接被无限期占用（2C2G 小堆下是致命的）
         HttpClient streamHttp = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000);
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .doOnConnected(conn -> conn.addHandlerLast(new ReadTimeoutHandler(120)));
         this.syncClient = build(syncHttp);
         this.streamClient = build(streamHttp);
     }
@@ -101,6 +107,31 @@ public class PythonAiClient {
 
     public AgentChatResponse agentChat(AgentChatRequest request, Long userId) {
         return post("/api/v1/agent/chat", request, AgentChatResponse.class, userId, false);
+    }
+
+    /**
+     * 会话历史回放（GET，前端刷新后恢复消息列表）。
+     * 403（会话不属于该用户）经信封翻译成 AiCallException(retryable=false)，由代理层透传前端。
+     */
+    public AgentHistoryResponse agentHistory(String conversationId, Long userId) {
+        try {
+            return syncClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/api/v1/agent/history")
+                            .queryParam("conversation_id", conversationId)
+                            .build())
+                    .headers(h -> injectHeaders(h, userId, false))
+                    .retrieve()
+                    .onStatus(status -> status.isError(),
+                            resp -> resp.bodyToMono(String.class)
+                                    .defaultIfEmpty("")
+                                    .map(raw -> toAiCallException(resp.statusCode().value(), raw)))
+                    .bodyToMono(AgentHistoryResponse.class)
+                    .block(Duration.ofSeconds(15));
+        } catch (AiCallException e) {
+            throw e;
+        } catch (Exception e) {
+            throw translateTransport(e);
+        }
     }
 
     // ---------- 流式端点（返回原始 SSE 帧流，透传层负责转发） ----------

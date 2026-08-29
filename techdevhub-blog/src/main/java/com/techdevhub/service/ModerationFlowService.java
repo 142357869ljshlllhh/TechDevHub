@@ -4,8 +4,6 @@ import com.techdevhub.client.AiServiceClient;
 import com.techdevhub.dto.ai.AiResult;
 import com.techdevhub.dto.ai.ModerationCheckRequest;
 import com.techdevhub.dto.ai.ModerationResult;
-import com.techdevhub.dto.ai.RagIngestRequest;
-import com.techdevhub.dto.ai.RagIngestResult;
 import com.techdevhub.dto.ai.RecheckRequest;
 import com.techdevhub.dto.ai.RecheckResponse;
 import com.techdevhub.entity.BlogInfo;
@@ -25,13 +23,11 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 审核编排 + 业务重试状态机（与 Python 侧的重试分工见 docs/java_ai_integration_plan.md §4）：
- *
  *   PENDING → GENERATING → OK(按 verdict 流转 status)
  *        ↓ 失败且 retryable=true
  *   指数退避(基数 2s, ×2^k, ±30% jitter) 上限 3 次；429 基数拉长到 5s
  *        ↓ 耗尽或 retryable=false
  *   GIVEUP → status 保持 0（审核中）+ review_reason=AGENT_FAILURE（管理端一键重审分组依据）
- *
  * Python 侧只做传输层重试（≤2 次），两侧放大倍数 2×3 可控——Java 不重复做传输层重试。
  */
 @Slf4j
@@ -43,6 +39,7 @@ public class ModerationFlowService {
     private final BlogMapper blogMapper;
     private final BlogModerationMapper moderationMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final RagIngestService ragIngestService;
 
     private static final String BLOG_DETAIL_CACHE_KEY = "blog:detail:";
     private static final String REVIEW_REASON_AGENT_FAILURE = "AGENT_FAILURE";
@@ -63,7 +60,9 @@ public class ModerationFlowService {
      */
     @Async("asyncExecutor")
     public void moderate(BlogInfo blog) {
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // 无条件 for：体内所有分支要么 return 要么 sleep 后重试，上限判断在 attempt == MAX_ATTEMPTS——
+        // 写 attempt <= MAX_ATTEMPTS 会被 IDEA 判定条件恒真
+        for (int attempt = 1; ; attempt++) {
             try {
                 AiResult<ModerationResult> resp = aiServiceClient.check(toCheckRequest(blog));
                 ModerationResult result = resp.getData();
@@ -86,23 +85,6 @@ public class ModerationFlowService {
                 }
                 sleepQuietly(backoffMs(attempt, e.getHttpStatus()));
             }
-        }
-    }
-
-    /**
-     * RAG ingest 旁路（审核通过发布 / 更新成功后触发）。
-     * 幂等（同 blog_id 重摄=覆盖）→ 失败仅告警不阻塞发布，补偿靠管理端重发或下次更新。
-     */
-    @Async("asyncExecutor")
-    public void ingest(BlogInfo blog) {
-        try {
-            AiResult<RagIngestResult> resp = aiServiceClient.ingest(
-                    new RagIngestRequest(blog.getId(), blog.getTitle(), blog.getContent()));
-            log.info("RAG ingest 完成 blogId={} chunks={}",
-                    blog.getId(), resp.getData() == null ? -1 : resp.getData().getChunkCount());
-        } catch (AiCallException e) {
-            // 只告警不打断：ingest 失败不影响用户已发布成功的事实
-            log.warn("RAG ingest 失败（可补偿重发）blogId={} code={}", blog.getId(), e.getAiCode(), e);
         }
     }
 
@@ -132,7 +114,8 @@ public class ModerationFlowService {
             case "approve" -> {
                 changeStatus(blog.getId(), 1);
                 saveRecord(blog, result, null, null);
-                ingest(blog); // 审核通过才进知识库（异步、失败不阻塞）
+                // 跨 Bean 调用走代理，@Async 才生效（自调用会静默退化为同步阻塞）
+                ragIngestService.ingest(blog);
                 log.info("审核通过 blogId={} layer={} latencyMs={}",
                         blog.getId(), result.getLayer(), result.getLatencyMs());
             }

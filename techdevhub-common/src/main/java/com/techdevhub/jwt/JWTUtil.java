@@ -21,10 +21,14 @@ public class JWTUtil {
     private SecretKey secretKey;
     @PostConstruct
     public void init() {
-        this.secretKey = Keys.hmacShaKeyFor(jwtProperties.getSecretKey().getBytes(StandardCharsets.UTF_8));
-    }
-    public String gengerateToken(Long userId){
-        return gengerateToken(userId, Map.of());
+        String secret = jwtProperties.getSecretKey();
+        // fail-fast：密钥缺失/过短直接拒启。HS256 要求 ≥256bit；
+        // 生产必须通过 TECHDEVHUB_JWT_SECRETKEY 注入强密钥，默认值仅限本地开发
+        if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException(
+                    "JWT secret 未配置或长度不足 32 字符，请设置 TECHDEVHUB_JWT_SECRETKEY");
+        }
+        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
     public String gengerateToken(Long userId, Map<String, Object> claims){
         if(userId == null) {
@@ -60,17 +64,12 @@ public class JWTUtil {
                     .verifyWith(secretKey)
                     .build()
                     .parseSignedClaims(actualToken)
-                    .getBody();
+                    .getPayload();
         }catch (ExpiredJwtException e){
             throw new BusinessException(ErrorCode.TOKENEXPIRED);
         }catch (JwtException | IllegalArgumentException e){
             throw new BusinessException(ErrorCode.TOKEN_INVALID);
         }
-    }
-
-    public Boolean validateToken(String token){
-        parseToken(token);
-        return true;
     }
     public Long getUserId(String token){
         String subject = parseToken(token).getSubject();

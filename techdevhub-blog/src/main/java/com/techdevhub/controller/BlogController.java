@@ -1,11 +1,13 @@
 package com.techdevhub.controller;
 
 import com.techdevhub.annotation.IgnoreToken;
+import com.techdevhub.config.JwtProperties;
 import com.techdevhub.dto.BlogCounterAdjustDTO;
 import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.dto.BlogUpdateDTO;
 import com.techdevhub.dto.ModerationRecheckDTO;
+import com.techdevhub.jwt.JWTUtil;
 import com.techdevhub.result.Result;
 import com.techdevhub.service.BlogService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,9 +15,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 
 @RestController
 @RequestMapping("/blogs")
@@ -23,10 +25,33 @@ import java.util.List;
 @Tag(name = "文章模块",description = "未登录用户即可分页查看文章、查看文章详情，登录状态下用户可以发布文章、修改文章、删除文章")
 public class BlogController {
     private final BlogService blogService;
+    private final JWTUtil jwtUtil;
+    private final JwtProperties jwtProperties;
 
 
     private Long currentUserId(HttpServletRequest request){
         return (Long)request.getAttribute("currentUserId");
+    }
+
+    /**
+     * 宽容解析当前用户：detail 是 @IgnoreToken 端点，拦截器不会解析 token，
+     * 而"作者查看自己未发布的草稿/审核中文章"需要身份。无 token、token 无效一律
+     * 返回 null——绝不影响匿名读已发布文章的主路径。
+     */
+    private Long currentUserIdOrNull(HttpServletRequest request) {
+        Long fromContext = currentUserId(request);
+        if (fromContext != null) {
+            return fromContext;
+        }
+        String token = request.getHeader(jwtProperties.getHeaderName());
+        if (!StringUtils.hasText(token)) {
+            return null;
+        }
+        try {
+            return jwtUtil.getUserId(token);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @PostMapping
@@ -58,8 +83,8 @@ public class BlogController {
     @GetMapping("/{blogId}")
     @Operation(summary = "查看博客详情")
     @IgnoreToken
-    public Result detail(@PathVariable Long blogId) {
-        return Result.success(blogService.detail(blogId));
+    public Result detail(@PathVariable Long blogId, HttpServletRequest request) {
+        return Result.success(blogService.detail(blogId, currentUserIdOrNull(request)));
     }
 
     @GetMapping("/hot/top10")
@@ -93,7 +118,7 @@ public class BlogController {
 
     @GetMapping("/pending")
     @Operation(summary = "查看待审核文章（管理员）")
-    public Result pendingBlogs(HttpServletRequest request) {
+    public Result pendingBlogs() {
         blogService.assertAdmin();
         return Result.success(blogService.pendingBlogs());
     }
@@ -101,8 +126,7 @@ public class BlogController {
     @PatchMapping("/{blogId}/status")
     @Operation(summary = "管理员修改文章审核状态（1=通过,2=驳回/下架）")
     public Result changeStatus(@PathVariable Long blogId,
-                               @RequestParam Integer status,
-                               HttpServletRequest request) {
+                               @RequestParam Integer status) {
         blogService.assertAdmin();
         blogService.changeStatus(blogId, status);
         return Result.success();

@@ -17,7 +17,11 @@ public interface BlogService {
 
     void blogDelete(Long currentUserId, Long blogId);
 
-    BlogDetailVO detail(Long blogId);
+    /**
+     * 详情：已发布文章任何人可见；status=0（审核中/草稿）仅作者本人可见（currentUserId
+     * 传入 null 表示匿名），他人与非作者一律 NOT_FOUND，不泄露存在性。
+     */
+    BlogDetailVO detail(Long blogId, Long currentUserId);
 
     PageResult<BlogSummaryVO> page(BlogPageSelectDTO dto);
 

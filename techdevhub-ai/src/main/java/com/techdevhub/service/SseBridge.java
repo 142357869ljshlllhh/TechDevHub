@@ -15,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * SSE 桥：把 Python 侧的 Flux&lt;ServerSentEvent&gt; 逐帧泵给 MVC 的 SseEmitter。
- *
  * 关键决策（对端 java_integration_deploy.md §3 逐条对应）：
  * 1. 原样转发、不重新序列化——data 帧内容按原始字符串直接透传；
  * 2. [DONE] 哨兵帧 → complete；流内 error 帧（Python 已发的）自然透传后随流关闭；
@@ -41,9 +40,12 @@ public final class SseBridge {
                 MediaType.APPLICATION_OCTET_STREAM);
     }
 
+    /** emitter 上限 10 分钟：防 Python 侧半开连接（心跳停发但 TCP 未断）无限期占用
+     *  Servlet 异步上下文与上游订阅；onTimeout 已有 dispose 清理。正常流远短于此。 */
+    private static final long EMITTER_TIMEOUT_MS = 10 * 60 * 1000L;
+
     public static SseEmitter bridge(Flux<ServerSentEvent<String>> upstream) {
-        // timeout=0 表示不超时，判活靠 Python 侧 15s 心跳帧（对端契约）
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MS);
         AtomicBoolean finished = new AtomicBoolean(false);
 
         Disposable disposable = upstream.subscribe(

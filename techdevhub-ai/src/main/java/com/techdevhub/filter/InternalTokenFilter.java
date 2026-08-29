@@ -8,10 +8,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.lang.NonNull;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -27,15 +27,25 @@ import java.security.MessageDigest;
  * token 留空 = 门禁关闭，仅限本地联调（与 Python 侧同规则）。
  */
 @Slf4j
-@RequiredArgsConstructor
 public class InternalTokenFilter extends OncePerRequestFilter {
 
     private final AiPythonProperties props;
     private final ObjectMapper objectMapper;
 
+    public InternalTokenFilter(AiPythonProperties props, ObjectMapper objectMapper) {
+        this.props = props;
+        this.objectMapper = objectMapper;
+        // compose 侧用 ${AI_INTERNAL_TOKEN:?err} 强制必填，这里是代码侧的第二道哨兵：
+        // 万一部署层漏配，启动日志必须有显眼的 ERROR，而不是静默开门
+        if (!StringUtils.hasText(props.getInternalToken())) {
+            log.error("InternalTokenFilter 门禁已关闭（internal-token 为空）——仅供本地联调，生产环境禁止此状态！");
+        }
+    }
+
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain chain) throws ServletException, IOException {
         String expected = props.getInternalToken();
         if (!StringUtils.hasText(expected)) {
             chain.doFilter(request, response); // 本地联调模式

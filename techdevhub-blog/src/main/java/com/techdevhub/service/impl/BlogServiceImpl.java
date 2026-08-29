@@ -69,7 +69,7 @@ public class BlogServiceImpl implements BlogService {
     private static final String BLOG_HOT_RANK_KEY = "blog:hot:rank";
     private static final String USER_PROFILE_CACHE_KEY = "user:profile:";
     private static final String BLOG_DETAIL_LOCK_KEY = "blog:detail:lock:";
-    private static final String BLOG_DETAIL_CACHE_KEY = "blog:detail:";
+    private static final String BLOG_DETAIL_CACHE_KEY = "blog:detail:v2:"; // v2：修复草稿越权缓存泄露后升版，作废旧键
     private static final String BLOG_DETAIL_NULL_MARK = "NULL";
     private static final int HOT_VIEW_DELTA_THRESHOLD = 5;
     private static final long HOT_DETAIL_CACHE_TTL_MINUTES = 20;
@@ -199,7 +199,7 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
-    public BlogDetailVO detail(Long blogId) {
+    public BlogDetailVO detail(Long blogId, Long currentUserId) {
         if (blogBloomFilter != null && !blogBloomFilter.mightContain(String.valueOf(blogId))) {
             throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
         }
@@ -219,8 +219,7 @@ public class BlogServiceImpl implements BlogService {
                         BlogInfo blogInfo = blogMapper.selectById(blogId);
                         if (blogInfo == null
                                 || (blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 1)
-                                || blogInfo.getStatus() == null
-                                || blogInfo.getStatus() == 2) {
+                                || blogInfo.getStatus() == null) {
                             stringRedisTemplate.opsForValue().set(
                                     cacheKey,
                                     BLOG_DETAIL_NULL_MARK,
@@ -228,6 +227,18 @@ public class BlogServiceImpl implements BlogService {
                                     TimeUnit.SECONDS
                             );
                             throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
+                        }
+                        if (blogInfo.getStatus() == 2) {
+                            // 已驳回/下架：对所有人不可见（保持原语义）
+                            throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
+                        }
+                        if (blogInfo.getStatus() != 1) {
+                            // 审核中/草稿（status=0）：仅作者本人可见，且绝不进详情缓存——
+                            // 否则任何匿名用户都能借缓存读到他人未发布全文
+                            if (currentUserId == null || !currentUserId.equals(blogInfo.getUserId())) {
+                                throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
+                            }
+                            return toDetail(blogInfo);
                         }
                         detail = toDetail(blogInfo);
                         long ttl = DETAIL_CACHE_BASE_TTL_SECONDS
@@ -550,11 +561,10 @@ public class BlogServiceImpl implements BlogService {
 
     private BlogInfo requirePublishedBlog(Long blogId) {
         BlogInfo blogInfo = blogMapper.selectById(blogId);
-        if (blogInfo == null || (blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 1)) {
+        if (blogInfo == null || (blogInfo.getIsDelete() != null && blogInfo.getIsDelete() == 1)
+                || blogInfo.getStatus() == null || blogInfo.getStatus() != 1) {
+            // 只有已发布(status=1)才可见——未发布内容对任何路径都视同不存在，不泄露存在性
             throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
-        }
-        if (blogInfo.getStatus() == null || blogInfo.getStatus() == 2) {
-            throw new BusinessException(ErrorCode.BLOG_NOT_PULL);
         }
         return blogInfo;
     }

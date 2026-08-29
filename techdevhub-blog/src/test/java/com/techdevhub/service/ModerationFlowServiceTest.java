@@ -3,7 +3,6 @@ package com.techdevhub.service;
 import com.techdevhub.client.AiServiceClient;
 import com.techdevhub.dto.ai.AiResult;
 import com.techdevhub.dto.ai.ModerationResult;
-import com.techdevhub.dto.ai.RagIngestResult;
 import com.techdevhub.entity.BlogInfo;
 import com.techdevhub.entity.BlogModeration;
 import com.techdevhub.exception.AiCallException;
@@ -23,7 +22,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -45,6 +43,8 @@ class ModerationFlowServiceTest {
     private BlogModerationMapper moderationMapper;
     @Mock
     private StringRedisTemplate stringRedisTemplate;
+    @Mock
+    private RagIngestService ragIngestService;
 
     private ModerationFlowService service;
 
@@ -59,7 +59,8 @@ class ModerationFlowServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ModerationFlowService(aiServiceClient, blogMapper, moderationMapper, stringRedisTemplate);
+        service = new ModerationFlowService(aiServiceClient, blogMapper, moderationMapper,
+                stringRedisTemplate, ragIngestService);
         // 单测不真实 sleep；真实基数 2s/5s 在字段注释里说明
         service.setNormalBackoffBaseMs(0);
         service.setRateLimitBackoffBaseMs(0);
@@ -72,8 +73,6 @@ class ModerationFlowServiceTest {
     @Test
     void approve_publishesAndTriggersIngest() {
         when(aiServiceClient.check(any())).thenReturn(new AiResult<>(200, "success", verdict("approve")));
-        when(aiServiceClient.ingest(any()))
-                .thenReturn(new AiResult<>(200, "success", new RagIngestResult(100L, 3)));
 
         service.moderate(blog());
 
@@ -81,8 +80,8 @@ class ModerationFlowServiceTest {
         ArgumentCaptor<BlogModeration> captor = ArgumentCaptor.forClass(BlogModeration.class);
         verify(moderationMapper).insert(captor.capture());
         assertThat(captor.getValue().getVerdict()).isEqualTo("approve");
-        // 审核通过 → 进知识库
-        verify(aiServiceClient).ingest(any());
+        // 审核通过 → 经独立 RagIngestService 异步进知识库（跨 Bean 才走 @Async 代理）
+        verify(ragIngestService).ingest(any(BlogInfo.class));
     }
 
     @Test
@@ -93,7 +92,7 @@ class ModerationFlowServiceTest {
 
         // review 不改状态：停在 0（审核中），进人工队列
         verify(blogMapper, never()).updateStatus(anyLong(), anyInt());
-        verify(aiServiceClient, never()).ingest(any());
+        verify(ragIngestService, never()).ingest(any());
         ArgumentCaptor<BlogModeration> captor = ArgumentCaptor.forClass(BlogModeration.class);
         verify(moderationMapper).insert(captor.capture());
         assertThat(captor.getValue().getVerdict()).isEqualTo("review");
@@ -106,7 +105,7 @@ class ModerationFlowServiceTest {
         service.moderate(blog());
 
         verify(blogMapper).updateStatus(100L, 2);
-        verify(aiServiceClient, never()).ingest(any());
+        verify(ragIngestService, never()).ingest(any());
     }
 
     @Test
@@ -136,16 +135,5 @@ class ModerationFlowServiceTest {
         verify(aiServiceClient, times(1)).check(any());
         verify(blogMapper, never()).updateStatus(anyLong(), anyInt());
         verify(moderationMapper).insert(any(BlogModeration.class));
-    }
-
-    @Test
-    void ingestFailure_neverThrowsAndDoesNotBlock() {
-        // T6 语义：ingest 失败仅告警，调用方（发布链路）不受影响
-        when(aiServiceClient.ingest(any()))
-                .thenThrow(new AiCallException("RAG 故障", 503, "RAG_TEMPORARY", true));
-
-        service.ingest(blog()); // 不应抛出
-
-        verify(aiServiceClient).ingest(any());
     }
 }
