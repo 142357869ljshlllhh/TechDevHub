@@ -1,11 +1,13 @@
 package com.techdevhub.controller;
 
 import com.techdevhub.dto.BlogInsertDTO;
+import com.techdevhub.dto.DraftSaveDTO;
 import com.techdevhub.vo.BlogDetailVO;
 import com.techdevhub.service.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -91,4 +93,17 @@ public class InternalApiController {
 
     /** publish_article 请求体：{userId, title, content, categoryId?} */
     public record PublishRequest(Long userId, String title, String content, Long categoryId) { }
+
+    /** publish_draft 工具回调：按 ID 发布用户已存草稿。服务端读草稿原文发布，
+     *  绝不经过模型转述的标题/正文（防止"发布的不是原文"）；
+     *  草稿不存在/非本人 → publishDraft 内部抛业务错误（requireOwnedDraft） */
+    @PostMapping("/blog/drafts/{blogId}/publish")
+    public Map<String, Object> publishDraft(@PathVariable Long blogId,
+                                            @RequestBody PublishDraftRequest request) {
+        BlogDetailVO vo = blogService.publishDraft(request.userId(), blogId, new DraftSaveDTO());
+        return Map.of("id", vo.getId());
+    }
+
+    /** publish_draft 请求体：{userId}——草稿内容取服务端真值，不经模型 */
+    public record PublishDraftRequest(Long userId) { }
 }

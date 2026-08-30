@@ -71,32 +71,37 @@ public class FollowServiceImpl implements FollowService {
     }
 
     public List<FollowersVO> getFollowers(Long userId){
-        List<Long> list = followMapper.getFollowers(userId);
-        List<FollowersVO> list1 = new ArrayList<>();
-        for (Long id:list){
-            Result result = userClient.getProfile(id);
-            if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
-                throw new BusinessException(ErrorCode.FOLLOW_USER_CLIENT_FAIL);
-            }
-            FollowersVO vo = objectMapper.convertValue(result.getData(), FollowersVO.class);
-            list1.add(vo);
-        }
-        return list1;
+        return toValidProfiles(followMapper.getFollowers(userId));
     }
 
     @Override
     public List<FollowersVO> getFollowing(Long userId) {
-        List<Long> list = followMapper.getFollowing(userId);
-        List<FollowersVO> list1 = new ArrayList<>();
-        for (Long id : list) {
-            Result result = userClient.getProfile(id);
-            if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
-                throw new BusinessException(ErrorCode.FOLLOW_USER_CLIENT_FAIL);
-            }
-            FollowersVO vo = objectMapper.convertValue(result.getData(), FollowersVO.class);
-            list1.add(vo);
+        return toValidProfiles(followMapper.getFollowing(userId));
+    }
+
+    /**
+     * id 列表 → 有效用户资料 VO。
+     * 为什么走批量端点（POST /users/profiles/batch）：
+     * 1) user 侧在该端点统一过滤已注销(is_delete=1)/封禁用户——账号软删后的
+     *    残留关注关系在这里被天然挡住，幽灵粉丝既不出现在列表也不计入计数；
+     * 2) 一次 RPC 替代逐条 getProfile 的 N+1；
+     * 3) user 服务故障/返回异常时返回空列表而非抛错——宁可短暂显示空列表，
+     *    不给用户整页报错（原实现对单个资料失败就 1303 炸全列表）。
+     */
+    private List<FollowersVO> toValidProfiles(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return new ArrayList<>();
         }
-        return list1;
+        Result result = userClient.batchGetProfiles(userIds);
+        if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
+            return new ArrayList<>();
+        }
+        List<?> profiles = (List<?>) result.getData();
+        List<FollowersVO> vos = new ArrayList<>(profiles.size());
+        for (Object profile : profiles) {
+            vos.add(objectMapper.convertValue(profile, FollowersVO.class));
+        }
+        return vos;
     }
 
     @Override
@@ -107,6 +112,10 @@ public class FollowServiceImpl implements FollowService {
 
     @Override
     public FollowCountsVO getCounts(Long userId) {
-        return new FollowCountsVO(followMapper.countFollowing(userId), followMapper.countFollowers(userId));
+        // 计数与列表同一套有效性口径（批量校验过滤已注销/封禁），
+        // 保证"2 粉丝"打开粉丝列表就真有 2 个人可看
+        return new FollowCountsVO(
+                (long) toValidProfiles(followMapper.getFollowing(userId)).size(),
+                (long) toValidProfiles(followMapper.getFollowers(userId)).size());
     }
 }

@@ -19,14 +19,23 @@ import java.util.Map;
 public class JWTUtil {
     private final JwtProperties jwtProperties;
     private SecretKey secretKey;
+    // 已知泄露的默认密钥（曾硬编码于 JwtProperties）。任何环境一旦退回它即可被伪造身份，
+    // 故显式拒绝，作为"删除默认值"后的双保险，防止有人重新加回默认。
+    private static final String LEAKED_DEFAULT_SECRET = "TechDevHubDefaultSecretKeyForJwtAuth2026";
+
     @PostConstruct
     public void init() {
         String secret = jwtProperties.getSecretKey();
-        // fail-fast：密钥缺失/过短直接拒启。HS256 要求 ≥256bit；
-        // 生产必须通过 TECHDEVHUB_JWT_SECRETKEY 注入强密钥，默认值仅限本地开发
+        // fail-fast：密钥缺失/过短/使用已泄露默认均直接拒启（fail-closed）。
+        // HS256 要求 ≥256bit；生产必须通过 TECHDEVHUB_JWT_SECRETKEY 注入强密钥。
         if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalStateException(
                     "JWT secret 未配置或长度不足 32 字符，请设置 TECHDEVHUB_JWT_SECRETKEY");
+        }
+        if (LEAKED_DEFAULT_SECRET.equals(secret)) {
+            throw new IllegalStateException(
+                    "JWT secret 不可使用已泄露的默认密钥 TechDevHubDefaultSecretKeyForJwtAuth2026，"
+                            + "请通过 TECHDEVHUB_JWT_SECRETKEY 注入独立强密钥");
         }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }

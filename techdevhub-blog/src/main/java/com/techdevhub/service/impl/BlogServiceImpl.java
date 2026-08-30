@@ -72,6 +72,8 @@ public class BlogServiceImpl implements BlogService {
     private static final String BLOG_COMMENT_KEY = "blog:comment:";
     private static final String BLOG_HOT_RANK_KEY = "blog:hot:rank";
     private static final String USER_PROFILE_CACHE_KEY = "user:profile:";
+    /** 已注销/封禁作者的展示名（资料接口业务性拒绝即确定不可见；user 服务故障的瞬时态不归入此类） */
+    private static final String DELETED_AUTHOR_NAME = "该用户已注销";
     private static final String BLOG_DETAIL_LOCK_KEY = "blog:detail:lock:";
     private static final String BLOG_DETAIL_CACHE_KEY = "blog:detail:v2:"; // v2：修复草稿越权缓存泄露后升版，作废旧键
     private static final String BLOG_DETAIL_NULL_MARK = "NULL";
@@ -753,6 +755,11 @@ public class BlogServiceImpl implements BlogService {
                         stringRedisTemplate.opsForValue().set(USER_PROFILE_CACHE_KEY + vo.getId(),
                                 objectMapper.writeValueAsString(cacheVo));
                     }
+                    // 批量成功即权威：user 侧会过滤注销/封禁用户，结果中缺席的
+                    // = 确定不可见，标注"该用户已注销"（而非落成空名/匿名）
+                    for (Long missId : missIds) {
+                        result.putIfAbsent(missId, DELETED_AUTHOR_NAME);
+                    }
                 }
             } catch (Exception ignored) {
                 // 批量失败时降级为逐个兜底，不影响列表返回
@@ -765,7 +772,9 @@ public class BlogServiceImpl implements BlogService {
         try {
             Result result = userProfileClient.getProfile(userId);
             if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
-                return null;
+                // 业务性拒绝（user 服务对已注销/封禁账号返回非 200）= 确定不可见，
+                // 展示"该用户已注销"而非空名。不回填缓存：注销支持找回，找回后自然恢复真名
+                return DELETED_AUTHOR_NAME;
             }
             UserProfileVO userProfileVO = objectMapper.convertValue(result.getData(), UserProfileVO.class);
             if (!StringUtils.hasText(userProfileVO.getUsername())) {
