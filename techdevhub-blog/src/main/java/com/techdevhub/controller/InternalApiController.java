@@ -1,5 +1,7 @@
 package com.techdevhub.controller;
 
+import com.techdevhub.dto.BlogInsertDTO;
+import com.techdevhub.vo.BlogDetailVO;
 import com.techdevhub.service.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -74,4 +76,19 @@ public class InternalApiController {
 
     /** create_draft 请求体：{userId, title, content}——字段名与 tools.py 逐字对齐 */
     public record CreateDraftRequest(Long userId, String title, String content) { }
+
+    /** publish_article 工具回调：走与用户发布完全相同的业务逻辑
+     *  （blogInsert：status=0 + 触发 AI 审核闭环），categoryId 未指定时归入默认分类 1 */
+    @PostMapping("/blog/publish")
+    public Map<String, Object> publish(@RequestBody PublishRequest request) {
+        BlogInsertDTO dto = new BlogInsertDTO();
+        dto.setTitle(request.title());
+        dto.setContent(request.content());
+        dto.setCategoryId(request.categoryId() != null ? request.categoryId() : 1L);
+        BlogDetailVO vo = blogService.blogInsert(request.userId(), dto);
+        return Map.of("id", vo.getId());
+    }
+
+    /** publish_article 请求体：{userId, title, content, categoryId?} */
+    public record PublishRequest(Long userId, String title, String content, Long categoryId) { }
 }

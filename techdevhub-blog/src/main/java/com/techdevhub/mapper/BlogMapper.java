@@ -18,8 +18,8 @@ public interface BlogMapper {
     BlogInfo selectById(Long id);
 
     @Insert("""
-            insert into blog_info (id, user_id, title, content, category_id)
-            values (#{id}, #{userId}, #{title}, #{content}, #{categoryId})
+            insert into blog_info (id, user_id, title, content, category_id, status)
+            values (#{id}, #{userId}, #{title}, #{content}, #{categoryId}, #{status})
             """)
     int insert(BlogInfo blogInfo);
 

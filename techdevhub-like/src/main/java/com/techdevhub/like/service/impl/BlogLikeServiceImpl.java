@@ -51,10 +51,18 @@ public class BlogLikeServiceImpl implements BlogLikeService {
         // 仅在“点赞关系从无效变有效”时增减博客服务的展示计数，
         // 保持幂等：重复点赞不会让 like_count 凭空 +1。
         if (needIncrease) {
+            // blog 侧对非已发布文章拒绝 +delta（草稿/审核中不可互动）。
+            // 业务拒绝必须回滚：吞掉会让"点赞草稿"留下有效关系记录，业务上不成立
+            //（与 comment 模块"计数失败即回滚"同一纪律）。
+            // 传输级异常（blog 瞬时不可用）仍宽容：展示计数最终由 DB 真相校准。
+            boolean rejectedByBlog = false;
             try {
-                blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(1));
+                Result result = blogClient.adjustLikeCount(blogId, new BlogCounterAdjustRequest(1));
+                rejectedByBlog = result == null || result.getCode() == null || result.getCode() != 200;
             } catch (Exception ignored) {
-                // 展示计数最终由 DB 真相校准，单次同步失败不影响主流程
+            }
+            if (rejectedByBlog) {
+                throw new BusinessException(ErrorCode.BLOG_NOT_FOUND);
             }
         }
         stringRedisTemplate.opsForSet().add(BLOG_LIKED_USERS_KEY + blogId, String.valueOf(userId));

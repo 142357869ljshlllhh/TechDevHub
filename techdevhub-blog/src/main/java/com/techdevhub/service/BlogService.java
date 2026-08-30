@@ -19,8 +19,8 @@ public interface BlogService {
     void blogDelete(Long currentUserId, Long blogId);
 
     /**
-     * 详情：已发布文章任何人可见；status=0（审核中/草稿）仅作者本人可见（currentUserId
-     * 传入 null 表示匿名），他人与非作者一律 NOT_FOUND，不泄露存在性。
+     * 详情：已发布文章任何人可见；status!=1（审核中 0 / 下架 2 / 草稿 3）仅作者本人
+     * 可见（currentUserId 传入 null 表示匿名），他人与非作者一律 NOT_FOUND，不泄露存在性。
      */
     BlogDetailVO detail(Long blogId, Long currentUserId);
 
@@ -42,12 +42,21 @@ public interface BlogService {
 
     /**
      * 创建博客草稿（供 Python Agent 写工具 create_draft 回调，T7）。
-     * 草稿 status=0 不触发审核、不进热榜；返回雪花 id。
+     * 草稿 status=3 不触发审核、不进热榜；返回雪花 id。
      */
     Long createDraft(Long userId, String title, String content);
 
-    /** 查询用户草稿列表（status=0 未发布文章，供 Python 工具 get_drafts 回调）。 */
+    /** 查询用户草稿列表（status=3 真草稿，供 Python 工具 get_drafts 回调）。 */
     java.util.List<com.techdevhub.entity.BlogInfo> draftsOf(Long userId);
+
+    /** 保存博客草稿（写作页"保存草稿"）：status=3，不触发审核、不进热榜；title/content 至少一项非空。 */
+    Long saveDraft(Long userId, com.techdevhub.dto.DraftSaveDTO dto);
+
+    /** 更新草稿：仅 status=3 的真草稿可走此通道（审核中/已上架文章走 blogUpdate，防止绕过重审）。 */
+    void updateDraft(Long userId, Long blogId, com.techdevhub.dto.DraftSaveDTO dto);
+
+    /** 草稿发布：status 3→0 进审核闭环（管理端待审可见），审核通过自动上架 + RAG 入库。 */
+    BlogDetailVO publishDraft(Long userId, Long blogId, com.techdevhub.dto.DraftSaveDTO dto);
 
     /**
      * 管理端批量重审（T8）：按 blogId 加载文章并同步调用重审，结果按 verdict 流转状态。

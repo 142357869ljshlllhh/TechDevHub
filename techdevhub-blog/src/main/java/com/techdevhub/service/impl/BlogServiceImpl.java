@@ -7,6 +7,7 @@ import com.techdevhub.dto.BlogCounterAdjustDTO;
 import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.dto.BlogUpdateDTO;
+import com.techdevhub.dto.DraftSaveDTO;
 import com.techdevhub.entity.BlogInfo;
 import com.techdevhub.entity.RagIndexStatus;
 import com.techdevhub.enums.ErrorCode;
@@ -132,6 +133,7 @@ public class BlogServiceImpl implements BlogService {
         blogDetailVO.setContent(dto.getContent());
         blogDetailVO.setCategoryId(dto.getCategoryId());
         blogDetailVO.setUserId(userId);
+        blogDetailVO.setStatus(0);
         blogDetailVO.setAuthorUsername(resolveAuthorUsername(userId));
         blogDetailVO.setCommentCount(0);
         blogDetailVO.setLikeCount(0);
@@ -353,12 +355,21 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public void adjustLikeCount(Long blogId, BlogCounterAdjustDTO dto) {
+        // 正向计数仅限已发布文章（草稿/审核中不可互动）；负向放行——取消点赞
+        // 属清理路径，历史脏计数必须能被减掉
+        if (dto.getDelta() != null && dto.getDelta() > 0) {
+            requirePublishedBlog(blogId);
+        }
         adjustCounter(BLOG_LIKE_KEY + blogId, dto.getDelta());
         stringRedisTemplate.opsForZSet().incrementScore(BLOG_HOT_RANK_KEY, String.valueOf(blogId), dto.getDelta() * 2D);
     }
 
     @Override
     public void adjustCommentCount(Long blogId, BlogCounterAdjustDTO dto) {
+        // 同 adjustLikeCount：+1 严格校验已发布，-1 宽容放行（删评论清理路径）
+        if (dto.getDelta() != null && dto.getDelta() > 0) {
+            requirePublishedBlog(blogId);
+        }
         adjustCounter(BLOG_COMMENT_KEY + blogId, dto.getDelta());
         stringRedisTemplate.opsForZSet().incrementScore(BLOG_HOT_RANK_KEY, String.valueOf(blogId), dto.getDelta() * 3D);
     }
@@ -387,13 +398,24 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public Long createDraft(Long userId, String title, String content) {
+        return saveDraft(userId, new DraftSaveDTO(title, content, null));
+    }
+
+    @Override
+    public Long saveDraft(Long userId, DraftSaveDTO dto) {
+        if (!StringUtils.hasText(dto.getTitle()) && !StringUtils.hasText(dto.getContent())) {
+            throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
+        }
         BlogInfo draft = new BlogInfo();
         Long id = snowflakeIdGenerator.nextId();
         draft.setId(id);
         draft.setUserId(userId);
-        draft.setTitle(title);
-        draft.setContent(content);
-        draft.setStatus(0); // 草稿=审核中态复用，不触发审核也不进热榜
+        // 空标题/空内容存空串而非 null：草稿允许半成品，发布时才强校验
+        draft.setTitle(StringUtils.hasText(dto.getTitle()) ? dto.getTitle().trim() : "");
+        draft.setContent(StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : "");
+        draft.setCategoryId(dto.getCategoryId() != null ? dto.getCategoryId() : 0L); // 0=未分类占位（列 NOT NULL），发布时归默认分类
+        // 草稿独立档位 status=3：与"审核中 0"区分，避免混入管理端待审队列
+        draft.setStatus(3);
         if (blogMapper.insert(draft) == 0) {
             throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
         }
@@ -408,11 +430,54 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDraft(Long userId, Long blogId, DraftSaveDTO dto) {
+        BlogInfo draft = requireOwnedDraft(userId, blogId);
+        String title = StringUtils.hasText(dto.getTitle()) ? dto.getTitle().trim() : draft.getTitle();
+        String content = StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : draft.getContent();
+        Long categoryId = dto.getCategoryId() != null ? dto.getCategoryId() : draft.getCategoryId();
+        blogMapper.updateBlog(blogId, title, content, categoryId);
+        // 草稿（status!=1）不进详情缓存（详情接口直读库），无需清缓存
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BlogDetailVO publishDraft(Long userId, Long blogId, DraftSaveDTO dto) {
+        BlogInfo draft = requireOwnedDraft(userId, blogId);
+        String title = StringUtils.hasText(dto.getTitle()) ? dto.getTitle().trim() : draft.getTitle();
+        String content = StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : draft.getContent();
+        // 分类取值：请求指定 > 草稿已存（0=未分类占位不算） > 默认分类 1（与 internal publish 一致）
+        Long categoryId = dto.getCategoryId() != null ? dto.getCategoryId()
+                : (draft.getCategoryId() != null && draft.getCategoryId() > 0 ? draft.getCategoryId() : 1L);
+        // 发布语义与 blogInsert 对齐（标题/正文必填；分类兜底后必非空）
+        if (!StringUtils.hasText(title) || !StringUtils.hasText(content)) {
+            throw new BusinessException(ErrorCode.BLOG_INSERT_FAILED);
+        }
+        blogMapper.updateBlog(blogId, title, content, categoryId);
+        // 草稿发布 = 进既有"先发后审"闭环：status 3→0（管理端待审可见），
+        // 审核通过 ModerationFlowService 流转 1 时自动 RAG ingest（M10）
+        blogMapper.updateStatus(blogId, 0);
+        // 草稿创建时未进热榜 ZSet，发布时补齐（与 blogInsert 同款初始化）
+        stringRedisTemplate.opsForZSet().add(BLOG_HOT_RANK_KEY, blogId.toString(), 0);
+        BlogInfo fresh = blogMapper.selectById(blogId);
+        triggerModerationAfterCommit(fresh);
+        return toDetail(fresh);
+    }
+
+    /** 归属 + 真草稿（status=3）双重校验：审核中/已上架文章不可走草稿通道绕过重审 */
+    private BlogInfo requireOwnedDraft(Long userId, Long blogId) {
+        BlogInfo draft = requireOwnedBlog(userId, blogId);
+        if (draft.getStatus() == null || draft.getStatus() != 3) {
+            throw new BusinessException(ErrorCode.BLOG_FORBIDDEN);
+        }
+        return draft;
+    }
+
+    @Override
     public List<BlogInfo> draftsOf(Long userId) {
-        // status=0 即"未发布"：涵盖用户手存草稿与审核中文章的集合语义，
-        // 对 get_drafts 工具来说"还没发出去的"就是草稿
+        // 仅 status=3 真草稿：审核中文章（0）不再混入"我的草稿"语义
         return blogMapper.selectByUserId(userId).stream()
-                .filter(b -> b.getStatus() != null && b.getStatus() == 0 && (b.getIsDelete() == null || b.getIsDelete() == 0))
+                .filter(b -> b.getStatus() != null && b.getStatus() == 3 && (b.getIsDelete() == null || b.getIsDelete() == 0))
                 .toList();
     }
 
@@ -571,6 +636,7 @@ public class BlogServiceImpl implements BlogService {
                 blogInfo.getTitle(),
                 blogInfo.getContent(),
                 blogInfo.getCategoryId(),
+                blogInfo.getStatus(),
                 readCounter(BLOG_LIKE_KEY + blogInfo.getId()),
                 readCounter(BLOG_VIEW_KEY + blogInfo.getId()),
                 readCounter(BLOG_COMMENT_KEY + blogInfo.getId()),

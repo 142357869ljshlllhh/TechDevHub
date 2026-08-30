@@ -6,6 +6,7 @@ import com.techdevhub.dto.BlogCounterAdjustDTO;
 import com.techdevhub.dto.BlogInsertDTO;
 import com.techdevhub.dto.BlogPageSelectDTO;
 import com.techdevhub.dto.BlogUpdateDTO;
+import com.techdevhub.dto.DraftSaveDTO;
 import com.techdevhub.dto.ModerationRecheckDTO;
 import com.techdevhub.jwt.JWTUtil;
 import com.techdevhub.result.Result;
@@ -64,6 +65,25 @@ public class BlogController {
     @Operation(summary = "修改博客")
     public Result update(@PathVariable Long blogId, @RequestBody BlogUpdateDTO dto, HttpServletRequest httpServletRequest) {
         return Result.success(blogService.blogUpdate(currentUserId(httpServletRequest), blogId, dto));
+    }
+
+    @PostMapping("/drafts")
+    @Operation(summary = "保存草稿")
+    public Result saveDraft(@RequestBody DraftSaveDTO dto, HttpServletRequest httpServletRequest) {
+        return Result.success(blogService.saveDraft(currentUserId(httpServletRequest), dto));
+    }
+
+    @PutMapping("/drafts/{blogId}")
+    @Operation(summary = "更新草稿")
+    public Result updateDraft(@PathVariable Long blogId, @RequestBody DraftSaveDTO dto, HttpServletRequest httpServletRequest) {
+        blogService.updateDraft(currentUserId(httpServletRequest), blogId, dto);
+        return Result.success();
+    }
+
+    @PostMapping("/drafts/{blogId}/publish")
+    @Operation(summary = "发布草稿（进 AI 审核闭环）")
+    public Result publishDraft(@PathVariable Long blogId, @RequestBody DraftSaveDTO dto, HttpServletRequest httpServletRequest) {
+        return Result.success(blogService.publishDraft(currentUserId(httpServletRequest), blogId, dto));
     }
 
     @DeleteMapping("/{blogId}")
