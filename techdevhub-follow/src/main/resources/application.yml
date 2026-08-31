@@ -21,7 +21,7 @@ mybatis:
 
 techdevhub:
   jwt:
-    secret-key: ${TECHDEVHUB_JWT_SECRETKEY:TechDevHubDefaultSecretKeyForJwtAuth2026}
+    secret-key: ${TECHDEVHUB_JWT_SECRETKEY}
     expiration: 86400000
     issuer: techdevhub
     header-name: Authorization
