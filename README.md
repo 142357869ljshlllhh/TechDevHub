@@ -1,6 +1,7 @@
 # TechDevHub
 
 > 面向计算机专业学生的技术社区 + AI Agent 平台
+> http://techdevhub.xyz
 
 ## 项目简介
 
@@ -11,8 +12,8 @@ TechDevHub 旨在解决高校课程体系与就业实际脱节的问题，为学
 | 部分 | 位置 | 技术栈 |
 |---|---|---|
 | Java 主站（本仓库） | 9 个 Maven 模块的微服务 | Java 17 + Spring Boot 3.5 + Spring Cloud 2025 + MyBatis + MySQL + Redis |
-| AI Agent 服务 | `techdevhub-agent/`（Python 项目，独立仓库开发中，后期并入本仓库） | Python 3.12 + FastAPI + LangGraph 1.2 + Chroma + Redis |
-| Web 前端 | `TechDevHub-Front`（独立仓库） | Vue 3.5 + Vite 5 + Pinia（无 UI 库） |
+| AI Agent 服务 | `techdevhub-agent/` | Python 3.12 + FastAPI + LangGraph 1.2 + Chroma + Redis |
+| Web 前端 | `TechDevHub-Front` | Vue 3.5 + Vite 5 + Pinia（无 UI 库） |
 
 ---
 
@@ -189,23 +190,6 @@ Python agent 启动后访问 `http://localhost:8000/docs`（FastAPI 自动生成
 
 ---
 
-## 相关文档
 
-| 文档 | 内容 |
-|---|---|
-| [docs/Java与AI服务集成方案.md](docs/Java与AI服务集成方案.md) | Java↔AI 集成契约、审核状态机、重试分工 |
-| [techdevhub-agent/README.md](techdevhub-agent/README.md) | AI 服务架构、能力总览、端点清单、测试策略 |
-| [techdevhub-agent/docs/decisions.md](techdevhub-agent/docs/decisions.md) | AI 服务设计决策档案（每个"为什么"） |
-| [techdevhub-agent/docs/java_integration_deploy.md](techdevhub-agent/docs/java_integration_deploy.md) | 集成部署 runbook |
-| [scripts/e2e-smoke.sh](scripts/e2e-smoke.sh) | Java↔Python 双端联调冒烟 |
 
-## Roadmap
-
-- [x] 社区核心功能（文章/互动/关注/管理后台）
-- [x] 前端（Vue 3）
-- [x] AI 助手 Agent / RAG / 审核 / 会话历史
-- [x] 草稿体系（独立状态档 + AI 代发走服务端原文）
-- [ ] 账号找回（注销软删数据已就绪，恢复流程待设计）
-- [ ] 通知模块（发布文章通知粉丝）
-- [ ] 搜索增强（Elasticsearch）
 - [ ] 图片/头像上传
